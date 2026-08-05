@@ -12,16 +12,16 @@ import (
 )
 
 func main() {
-	connStr := "host=localhost port=5432 user=postgres password=postgres dbname=downloader_db sslmode=disable"
+	connStr := "host=localhost port=5432 user=admin password=admin dbname=downloader_db sslmode=disable"
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		log.Fatalf("Ошибка парсинга строки подключения: %v", err)
+		log.Fatalf("что то со строкой подключния: %v", err)
 	}
 	defer db.Close()
 	if err := db.Ping(); err != nil {
-		log.Fatalf("Нет связи с базой данных: %v", err)
+		log.Fatalf("рикошет: %v", err)
 	}
-	log.Println("Успешное подключение к PostgreSQL!")
+	log.Println("есть пробитие")
 
 	repo := repository.NewPostgresRepo(db)       
 	service := usecase.NewDownloadService(repo)
