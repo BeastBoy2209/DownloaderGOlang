@@ -46,7 +46,7 @@ func (p *PostgresRepo) GetFile(taskID int, fileID int) ([]byte, error) {
 	return content, err
 }
 
-func (p *PostgresRepo) RecievingDownload(taskID int) (domain.DownloadTask, error) {
+func (p *PostgresRepo) RecieveDownload(taskID int) (domain.DownloadTask, error) {
 	var task domain.DownloadTask
 	err := p.db.QueryRow("SELECT id, status FROM downloads WHERE id = $1", taskID).Scan(&task.ID, &task.Status)
 	if err != nil {
