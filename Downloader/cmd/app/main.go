@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	_ "github.com/lib/pq"
@@ -9,10 +10,14 @@ import (
 	"downloader/internal/repository"
 	"downloader/internal/transport"
 	"downloader/internal/usecase"
+	"downloader/internal/config"
 )
 
 func main() {
-	connStr := "host=localhost port=5432 user=admin password=admin dbname=downloader_db sslmode=disable"
+	cfg := config.Load()
+	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
+
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatalf("что то со строкой подключния: %v", err)
@@ -31,6 +36,13 @@ func main() {
 
 	log.Println("started")
 	if err := http.ListenAndServe(":2020", mux); err != nil {
+		log.Fatalf("Shit happens... %v", err)
+	}
+
+	addr := fmt.Sprintf(":%s", cfg.ServerPort)
+	log.Printf("started on port %s", addr)
+
+	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("Shit happens... %v", err)
 	}
 }
