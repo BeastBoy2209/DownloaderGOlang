@@ -7,10 +7,10 @@ import (
 	"net/http"
 	_ "github.com/lib/pq"
 
+	"downloader/internal/config"
 	"downloader/internal/repository"
 	"downloader/internal/transport"
 	"downloader/internal/usecase"
-	"downloader/internal/config"
 )
 
 func main() {
@@ -24,9 +24,9 @@ func main() {
 	}
 	defer db.Close()
 	if err := db.Ping(); err != nil {
-		log.Fatalf("рикошет: %v", err)
+		log.Fatalf("не заупстился: %v", err)
 	}
-	log.Println("есть пробитие")
+	log.Println("запустился")
 
 	repo := repository.NewPostgresRepo(db)       
 	service := usecase.NewDownloadService(repo)
@@ -34,15 +34,10 @@ func main() {
 
 	mux := handler.InitRoutes()
 
-	log.Println("started")
-	if err := http.ListenAndServe(":2020", mux); err != nil {
-		log.Fatalf("Shit happens... %v", err)
-	}
-
 	addr := fmt.Sprintf(":%s", cfg.ServerPort)
-	log.Printf("started on port %s", addr)
+	log.Printf("порт: %s", addr)
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("Shit happens... %v", err)
+		log.Fatalf("упал %v", err)
 	}
 }
