@@ -28,7 +28,7 @@ type DB struct {
 func Load() *Config {
 	
 	if err := godotenv.Load(); err != nil {
-		log.Println(".env file not exist: %v", err)
+		log.Printf(".env file not exist: %v", err)
 	}
 	var cfg Config
 	if err := env.Parse(&cfg); err != nil{
