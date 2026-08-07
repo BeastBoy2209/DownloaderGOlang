@@ -15,18 +15,18 @@ import (
 
 func main() {
 	cfg := config.Load()
-	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name)
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		log.Fatalf("что то со строкой подключния: %v", err)
+		log.Fatalf("sql can't open db %v", err)
 	}
 	defer db.Close()
 	if err := db.Ping(); err != nil {
-		log.Fatalf("не заупстился: %v", err)
+		log.Fatalf("database cant start %v", err)
 	}
-	log.Println("запустился")
+	log.Println("OK")
 
 	repo := repository.NewPostgresRepo(db)       
 	service := usecase.NewDownloadService(repo)
@@ -34,10 +34,10 @@ func main() {
 
 	mux := handler.InitRoutes()
 
-	addr := fmt.Sprintf(":%s", cfg.ServerPort)
-	log.Printf("порт: %s", addr)
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	log.Printf("PORT: %s", addr)
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("упал %v", err)
+		log.Fatalf("Error %v", err)
 	}
 }

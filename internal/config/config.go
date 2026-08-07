@@ -2,25 +2,37 @@ package config
 
 import (
 	"log"
+
 	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	ServerPort string `env:"SERVER_PORT,required"`
+    Server Server `envPrefix:"SERVER_"`
+    DB     DB     `envPrefix:"DB_"`
+}
 
-//бдшка
-	DBHost     string `env:"DB_HOST,required"`
-	DBPort     string `env:"DB_PORT,required"`
-	DBUser     string `env:"DB_USER,required"`
-	DBPassword string `env:"DB_PASSWORD,required"`
-	DBName     string `env:"DB_NAME,required"`
+type Server struct {
+    Port uint16 `env:"PORT,notEmpty"` 
+}
+
+type DB struct {
+    Host     string `env:"HOST,notEmpty"`
+    Port     uint16 `env:"PORT,notEmpty"`
+    User     string `env:"USER,notEmpty"`
+    Password string `env:"PASSWORD,notEmpty"`
+    Name     string `env:"NAME,notEmpty"`
 }
 
 // при отсутсвии переменных крашнется
 func Load() *Config {
+	
+	if err := godotenv.Load(); err != nil {
+		log.Println(".env file not exist: %v", err)
+	}
 	var cfg Config
-	if err := env.Parse(&cfg); err != nil {
-		log.Fatalf("ошбибка, не хватает переменных: %v", err)
+	if err := env.Parse(&cfg); err != nil{
+		log.Fatalf("somethig wrong with credentials in .env: %v", err)
 	}
 	return &cfg
 }
