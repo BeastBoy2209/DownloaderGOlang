@@ -2,9 +2,10 @@ package transport
 
 import (
 	"downloader/internal/usecase"
-	"net/http"
 	"encoding/json"
+	"net/http"
 	"strconv"
+	"time"
 )
 
 type Handler struct{
@@ -27,7 +28,13 @@ func (h *Handler)StartDownload(w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-	taskID,err := h.service.StartDownload(req.URLs, req.Timeout)
+	timeout, err := time.ParseDuration(req.Timeout)
+	if err != nil {
+		http.Error(w, "invalid timeout format", http.StatusBadRequest)
+		return
+	}
+
+	taskID, err := h.service.StartDownload(req.URLs, timeout)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

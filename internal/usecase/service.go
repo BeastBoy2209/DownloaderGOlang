@@ -85,7 +85,7 @@ func NewDownloadService(r domain.Repository) *DownloadService{
 	}
 }
 
-func (d *DownloadService) StartDownload(urls []string, timeout string) (int, error) {
+func (d *DownloadService) StartDownload(urls []string, timeout time.Duration) (int, error) {
 	var files []domain.File
 	for _, u := range urls {
 		files = append(files, domain.File{URL: u})
@@ -100,15 +100,9 @@ func (d *DownloadService) StartDownload(urls []string, timeout string) (int, err
 		return 0, err
 	}
 
-	duration, durerr := time.ParseDuration(timeout)
-	if durerr != nil{
-		return 0, durerr
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), duration)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 
 	go d.runBackgroundProcess(ctx, cancel, id, task.Files)
 
 	return id, nil
-
-
 }

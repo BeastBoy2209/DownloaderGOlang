@@ -33,4 +33,3 @@ go.work.sum
 # Coverage reports
 coverage.out
 coverage.html
-.DS_Store
