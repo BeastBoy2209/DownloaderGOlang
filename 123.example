@@ -1,0 +1,12 @@
+CREATE TABLE downloads (
+    id SERIAL PRIMARY KEY,
+    status VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE files (
+    id SERIAL PRIMARY KEY,
+    download_id INTEGER REFERENCES downloads(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    error_code VARCHAR(255),
+    content BYTEA
+);

@@ -4,6 +4,7 @@ import (
 	"context"
 	"downloader/internal/domain"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -30,24 +31,42 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int,fil
 	url := file.URL
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil{
+		log.Printf("[Task %d] Creation request error %s: %v", taskID, url, err)
 		d.repo.SaveFile(taskID, file.ID, "ERROR", nil)
 		return
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil{
+		log.Printf("[Task %d] downloading error %s: %v", taskID, url, err)
 		d.repo.SaveFile(taskID, file.ID, "ERROR", nil)
 		return
 	}
 	defer resp.Body.Close()
-	bytes, err := io.ReadAll(resp.Body)
-	if err != nil{
+	
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[Task %d] no content or server error %s (Статус: %d)", taskID, url, resp.StatusCode)
 		d.repo.SaveFile(taskID, file.ID, "ERROR", nil)
 		return
 	}
+
+	bytes, err := io.ReadAll(resp.Body)
+	if err != nil{
+		log.Printf("[Task %d] bodyreading error %s: %v", taskID, url, err)
+		d.repo.SaveFile(taskID, file.ID, "ERROR", nil)
+		return
+	}
+	
+	if len(bytes) == 0 {
+		log.Printf("[Task %d] Link: %s is empty 0KB", taskID, url)
+	} else {
+		log.Printf("[Task %d] OK (%d b), link:  %s", taskID, len(bytes), url)
+	}
+	
 	d.repo.SaveFile(taskID, file.ID, "", bytes)
 }
 
-func (d *DownloadService) runBackgroundProcess(ctx context.Context, taskID int, files []domain.File){
+func (d *DownloadService) runBackgroundProcess(ctx context.Context, cancel context.CancelFunc, taskID int, files []domain.File){
+	defer cancel()
 	var wg sync.WaitGroup
 	for _, f := range files{
 		wg.Add(1)
@@ -86,9 +105,8 @@ func (d *DownloadService) StartDownload(urls []string, timeout string) (int, err
 		return 0, durerr
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
-	defer cancel()
 
-	go d.runBackgroundProcess(ctx, id, task.Files)
+	go d.runBackgroundProcess(ctx, cancel, id, task.Files)
 
 	return id, nil
 
