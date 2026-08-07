@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,7 +11,7 @@ import (
 	"time"
 	"errors"
 
-	_ "github.com/lib/pq"
+	"github.com/jackc/pgx/v5"
 
 	"downloader/internal/config"
 	"downloader/internal/repository"
@@ -22,17 +21,17 @@ import (
 
 func main() {
 	cfg := config.Load()
-	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Password, cfg.DB.Name)
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name)
 
-	db, err := sql.Open("postgres", connStr)
+	db, err := pgx.Connect(context.Background(), connStr)
 	if err != nil {
-		log.Fatalf("sql can't open db %v", err)
+		log.Fatalf("pgx can't connect db %v", err)
 	}
 	
-	defer db.Close() 
+	defer db.Close(context.Background()) 
 	
-	if err := db.Ping(); err != nil {
+	if err := db.Ping(context.Background()); err != nil {
 		log.Fatalf("database cant start %v", err)
 	}
 	log.Println("DB OK")
@@ -71,5 +70,5 @@ func main() {
 		log.Fatalf("Server was stopped cause error or timeout: %v", err)
 	}
 
-	log.Println("Server was successfully shut down")
+	log.Println("server was successfully shut down")
 }

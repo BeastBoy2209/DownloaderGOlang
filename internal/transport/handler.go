@@ -1,60 +1,91 @@
 package transport
 
 import (
+	"downloader/internal/domain"
 	"downloader/internal/usecase"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
 )
 
-type Handler struct{
+type Handler struct {
 	service *usecase.DownloadService
 }
 
-func NewHandler(service *usecase.DownloadService) *Handler{
+func NewHandler(service *usecase.DownloadService) *Handler {
 	return &Handler{
 		service: service,
 	}
 }
 
-func (h *Handler)StartDownload(w http.ResponseWriter, r *http.Request){
-	var req struct {
-		URLs    []string `json:"urls"`
-		Timeout string   `json:"timeout"`
+func handleError(w http.ResponseWriter, err error) {
+	if errors.Is(err, domain.ErrClient) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil{
-		http.Error(w , "invalid format", http.StatusBadRequest)
+	if errors.Is(err, domain.ErrBusiness) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	http.Error(w, "internal server error", http.StatusInternalServerError)
+}
+
+func (h *Handler) StartDownload(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Files   []struct {
+			URL string `json:"url"`
+		} `json:"files"`
+		Timeout string `json:"timeout"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		handleError(w, domain.ErrClient)
 		return
 	}
 
 	timeout, err := time.ParseDuration(req.Timeout)
 	if err != nil {
-		http.Error(w, "invalid timeout format", http.StatusBadRequest)
+		handleError(w, domain.ErrClient)
 		return
 	}
 
-	taskID, err := h.service.StartDownload(req.URLs, timeout)
+	var urls []string
+	for _, f := range req.Files {
+		urls = append(urls, f.URL)
+	}
+
+	if len(urls) == 0 {
+		http.Error(w, "files array is empty or missing (make sure to use 'files' key)", http.StatusBadRequest)
+		return
+	}
+
+	taskID, err := h.service.StartDownload(r.Context(), urls, timeout)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		handleError(w, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"task_id": taskID})
+	json.NewEncoder(w).Encode(map[string]any{
+		"id":     taskID,
+		"status": "PROCESS",
+	})
 }
 
 func (h *Handler) GetDownload(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	taskID, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, "неверный ID", http.StatusBadRequest)
+		handleError(w, domain.ErrClient)
 		return
 	}
 
-	task, err := h.service.GetDownload(taskID)
+	task, err := h.service.GetDownload(r.Context(), taskID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		handleError(w, err)
 		return
 	}
 
@@ -62,27 +93,27 @@ func (h *Handler) GetDownload(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(task)
 }
 
-func (h *Handler)GetFile (w http.ResponseWriter, r *http.Request){
+func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
 	taskID, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil{
-		http.Error(w, "invalid taskID", http.StatusBadRequest)
+	if err != nil {
+		handleError(w, domain.ErrClient)
 		return
 	}
 	fileID, err := strconv.Atoi(r.PathValue("file_id"))
-	if err != nil{
-		http.Error(w, "invalid fileID", http.StatusBadRequest)
+	if err != nil {
+		handleError(w, domain.ErrClient)
 		return
 	}
-	content, err := h.service.GetFileContent(taskID, fileID)
-	if err!= nil{
-		http.Error(w, "some problems with content", http.StatusNotFound)
+	content, err := h.service.GetFileContent(r.Context(), taskID, fileID)
+	if err != nil {
+		handleError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Write(content)
 }
 
-func (h *Handler)InitRoutes()(*http.ServeMux){
+func (h *Handler) InitRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /downloads", h.StartDownload)
 	mux.HandleFunc("GET /downloads/{id}", h.GetDownload)
