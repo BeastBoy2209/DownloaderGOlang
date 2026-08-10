@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,9 +10,9 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"errors"
 
-	"github.com/jackc/pgx/v5"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 
 	"downloader/internal/config"
 	"downloader/internal/repository"
@@ -24,20 +25,19 @@ func main() {
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
 		cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name)
 
-	db, err := pgx.Connect(context.Background(), connStr)
+	db, err := sqlx.Connect("pgx", connStr)
 	if err != nil {
-		log.Fatalf("pgx can't connect db %v", err)
+		log.Fatalf("sqlx can't connect db %v", err)
 	}
-	
-	defer db.Close(context.Background()) 
-	
-	if err := db.Ping(context.Background()); err != nil {
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
 		log.Fatalf("database cant start %v", err)
 	}
 	log.Println("DB OK")
 
 	repo := repository.NewPostgresRepo(db)
-	service := usecase.NewDownloadService(repo)
+	service := usecase.NewDownloadService(repo, http.DefaultClient)
 	handler := transport.NewHandler(service)
 
 	mux := handler.InitRoutes()
@@ -47,7 +47,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: mux, 
+		Handler: mux,
 	}
 
 	go func() {

@@ -5,18 +5,16 @@ import (
 	"downloader/internal/domain"
 	"sync"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jmoiron/sqlx"
 )
 
 type PostgresRepo struct {
-	conn *pgx.Conn
-	mu   sync.Mutex
+	db *sqlx.DB
+	mu sync.Mutex
 }
 
-func NewPostgresRepo(conn *pgx.Conn) *PostgresRepo {
-	return &PostgresRepo{
-		conn: conn,
-	}
+func NewPostgresRepo(db *sqlx.DB) *PostgresRepo {
+	return &PostgresRepo{db: db}
 }
 
 func (r *PostgresRepo) TaskCreation(ctx context.Context, task *domain.DownloadTask) (int, error) {
@@ -24,12 +22,12 @@ func (r *PostgresRepo) TaskCreation(ctx context.Context, task *domain.DownloadTa
 	defer r.mu.Unlock()
 
 	var taskID int
-	err := r.conn.QueryRow(ctx, "INSERT INTO downloads (status) VALUES ($1) RETURNING id", task.Status).Scan(&taskID)
+	err := r.db.GetContext(ctx, &taskID, "INSERT INTO downloads (status) VALUES ($1) RETURNING id", task.Status)
 	if err != nil {
 		return 0, err
 	}
 	for i := range task.Files {
-		err := r.conn.QueryRow(ctx, "INSERT INTO files (download_id, url) VALUES ($1, $2) RETURNING id", taskID, task.Files[i].URL).Scan(&task.Files[i].ID)
+		err := r.db.GetContext(ctx, &task.Files[i].ID, "INSERT INTO files (download_id, url) VALUES ($1, $2) RETURNING id", taskID, task.Files[i].URL)
 		if err != nil {
 			return 0, err
 		}
@@ -37,76 +35,76 @@ func (r *PostgresRepo) TaskCreation(ctx context.Context, task *domain.DownloadTa
 	return taskID, nil
 }
 
-func (p *PostgresRepo) SaveFile(ctx context.Context, taskID int, fileID int, errCode string, content []byte) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (r *PostgresRepo) SaveFile(ctx context.Context, taskID int, fileID int, errCode string, content []byte) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	var ec *string
 	if errCode != "" {
 		ec = &errCode
 	}
 
-	_, err := p.conn.Exec(ctx, "UPDATE files SET error_code = $1, content = $2 WHERE id = $3 AND download_id = $4", ec, content, fileID, taskID)
+	_, err := r.db.ExecContext(ctx, "UPDATE files SET error_code = $1, content = $2 WHERE id = $3 AND download_id = $4", ec, content, fileID, taskID)
 	return err
 }
 
-func (p *PostgresRepo) UpdateStatus(ctx context.Context, taskID int, newStatus string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (r *PostgresRepo) UpdateStatus(ctx context.Context, taskID int, newStatus string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	_, err := p.conn.Exec(ctx, "UPDATE downloads SET status = $1 WHERE id = $2", newStatus, taskID)
+	_, err := r.db.ExecContext(ctx, "UPDATE downloads SET status = $1 WHERE id = $2", newStatus, taskID)
 	return err
 }
 
-func (p *PostgresRepo) GetFile(ctx context.Context, taskID int, fileID int) ([]byte, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (r *PostgresRepo) GetFile(ctx context.Context, taskID int, fileID int) ([]byte, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	var content []byte
-	err := p.conn.QueryRow(ctx, "SELECT content FROM files WHERE id = $1 AND download_id = $2", fileID, taskID).Scan(&content)
-	if err == pgx.ErrNoRows {
-		return nil, domain.ErrClient
+	var rows []struct {
+		Content []byte `db:"content"`
 	}
+	err := r.db.SelectContext(ctx, &rows, "SELECT content FROM files WHERE id = $1 AND download_id = $2", fileID, taskID)
 	if err != nil {
 		return nil, err
 	}
-	return content, nil
+	if len(rows) == 0 {
+		return nil, domain.ErrClient
+	}
+	return rows[0].Content, nil
 }
 
-func (p *PostgresRepo) RecieveDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (r *PostgresRepo) RecieveDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	var task domain.DownloadTask
-	err := p.conn.QueryRow(ctx, "SELECT id, status FROM downloads WHERE id = $1", taskID).Scan(&task.ID, &task.Status)
-	if err == pgx.ErrNoRows {
-		return task, domain.ErrClient
+	var tasks []domain.DownloadTask
+	err := r.db.SelectContext(ctx, &tasks, "SELECT id, status FROM downloads WHERE id = $1", taskID)
+	if err != nil {
+		return domain.DownloadTask{}, err
 	}
+	if len(tasks) == 0 {
+		return domain.DownloadTask{}, domain.ErrClient
+	}
+	task := tasks[0]
+
+	type fileRow struct {
+		ID        int    `db:"id"`
+		URL       string `db:"url"`
+		ErrorCode string `db:"error_code"`
+	}
+
+	var rows []fileRow
+	err = r.db.SelectContext(ctx, &rows, "SELECT id, url, COALESCE(error_code, '') AS error_code FROM files WHERE download_id = $1", taskID)
 	if err != nil {
 		return task, err
 	}
 
-	rows, err := p.conn.Query(ctx, "SELECT id, url, error_code FROM files WHERE download_id = $1", taskID)
-	if err != nil {
-		return task, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var f domain.File
-		var ec *string
-		
-		err := rows.Scan(&f.ID, &f.URL, &ec)
-		if err != nil {
-			return task, err
+	for _, row := range rows {
+		file := domain.File{ID: row.ID, URL: row.URL}
+		if row.ErrorCode != "" {
+			file.ErrorCode = &domain.ErrorCode{Code: row.ErrorCode}
 		}
-		if ec != nil && *ec != "" {
-			f.ErrorCode = &domain.ErrorCode{Code: *ec}
-		}
-		task.Files = append(task.Files, f)
-	}
-	if err := rows.Err(); err != nil {
-		return task, err
+		task.Files = append(task.Files, file)
 	}
 
 	return task, nil

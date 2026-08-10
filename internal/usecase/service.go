@@ -16,11 +16,16 @@ type DownloadService struct {
 	client *http.Client
 }
 
-func NewDownloadService(r domain.Repository) *DownloadService {
+func NewDownloadService(r domain.Repository, client *http.Client) *DownloadService {
+	if client == nil {
+		client = http.DefaultClient
+	}
 	return &DownloadService{
 		repo: r,
+		client: client,
 	}
 }
+
 
 //test +
 func (d *DownloadService) GetDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) { 
@@ -36,7 +41,7 @@ func (d *DownloadService) GetFileContent(ctx context.Context, taskID int, fileID
 	return content, err
 }
 
-//test +-
+//test +
 func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, file domain.File) {
 	url := file.URL
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -49,7 +54,7 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 	// чтобы cloudflare не блокал
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-	resp, err := http.DefaultClient.Do(req)
+    resp, err := d.client.Do(req)
 	if err != nil {
 		log.Printf("[Task %d] downloading error %s: %v", taskID, url, err)
 		d.repo.SaveFile(ctx, taskID, file.ID, "ERROR", nil)

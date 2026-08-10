@@ -2,7 +2,6 @@ package config
 
 import (
 	"log"
-
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
 )
