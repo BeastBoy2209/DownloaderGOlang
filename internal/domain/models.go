@@ -1,3 +1,4 @@
+//go:generate go run go.uber.org/mock/mockgen@latest -destination=../mocks/mock_repository.go -package=mocks downloader/internal/domain Repository
 package domain
 
 import "context"
