@@ -13,6 +13,7 @@ import (
 
 type DownloadService struct {
 	repo domain.Repository
+	client *http.Client
 }
 
 func NewDownloadService(r domain.Repository) *DownloadService {
@@ -21,11 +22,12 @@ func NewDownloadService(r domain.Repository) *DownloadService {
 	}
 }
 
-func (d *DownloadService) GetDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) {
+//test +
+func (d *DownloadService) GetDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) { 
 	task, err := d.repo.RecieveDownload(ctx, taskID)
 	return task, err
 }
-
+//test +
 func (d *DownloadService) GetFileContent(ctx context.Context, taskID int, fileID int) ([]byte, error) {
 	content, err := d.repo.GetFile(ctx, taskID, fileID)
 	if err != nil {
@@ -34,6 +36,7 @@ func (d *DownloadService) GetFileContent(ctx context.Context, taskID int, fileID
 	return content, err
 }
 
+//test +-
 func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, file domain.File) {
 	url := file.URL
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -76,6 +79,7 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 	d.repo.SaveFile(ctx, taskID, file.ID, "", bytes)
 }
 
+//test+
 func (d *DownloadService) runBackgroundProcess(ctx context.Context, cancel context.CancelFunc, taskID int, files []domain.File) {
 	defer cancel()
 	
@@ -94,6 +98,7 @@ func (d *DownloadService) runBackgroundProcess(ctx context.Context, cancel conte
 	d.repo.UpdateStatus(context.Background(), taskID, "DONE")
 }
 
+//test-
 func (d *DownloadService) StartDownload(ctx context.Context, urls []string, timeout time.Duration) (int, error) {
 	var files []domain.File
 	for _, u := range urls {
