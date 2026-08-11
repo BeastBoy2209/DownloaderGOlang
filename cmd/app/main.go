@@ -36,17 +36,17 @@ func main() {
 	log.Println("DB OK")
 
 	repo := repository.NewPostgresRepo(db)
-	service := usecase.NewDownloadService(repo, http.DefaultClient)
+	service := usecase.NewDownloadService(repo, nil)
 	handler := transport.NewHandler(service)
 
-	mux := handler.InitRoutes()
+	e := handler.InitRoutes()
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	log.Printf("PORT: %s", addr)
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: mux,
+		Handler: e,
 	}
 
 	go func() {

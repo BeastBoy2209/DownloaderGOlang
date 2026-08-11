@@ -3,11 +3,11 @@ package transport
 import (
 	"downloader/internal/domain"
 	"downloader/internal/usecase"
-	"encoding/json"
 	"errors"
-	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/labstack/echo/v5"
 )
 
 type Handler struct {
@@ -20,36 +20,30 @@ func NewHandler(service *usecase.DownloadService) *Handler {
 	}
 }
 
-func handleError(w http.ResponseWriter, err error) {
+func handleError(c *echo.Context, err error) error {
 	if errors.Is(err, domain.ErrClient) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return c.JSON(400, map[string]string{"error": err.Error()})
 	}
 	if errors.Is(err, domain.ErrBusiness) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
+		return c.JSON(200, map[string]string{"error": err.Error()})
 	}
-	http.Error(w, "internal server error", http.StatusInternalServerError)
+	return c.JSON(500, map[string]string{"error": "internal server error"})
 }
 
-func (h *Handler) StartDownload(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) StartDownload(c *echo.Context) error {
 	var req struct {
 		Files []struct {
 			URL string `json:"url"`
 		} `json:"files"`
 		Timeout string `json:"timeout"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		handleError(w, domain.ErrClient)
-		return
+	if err := c.Bind(&req); err != nil {
+		return handleError(c, domain.ErrClient)
 	}
 
 	timeout, err := time.ParseDuration(req.Timeout)
 	if err != nil {
-		handleError(w, domain.ErrClient)
-		return
+		return handleError(c, domain.ErrClient)
 	}
 
 	var urls []string
@@ -57,61 +51,52 @@ func (h *Handler) StartDownload(w http.ResponseWriter, r *http.Request) {
 		urls = append(urls, f.URL)
 	}
 
-	taskID, err := h.service.StartDownload(r.Context(), urls, timeout)
+	taskID, err := h.service.StartDownload(c.Request().Context(), urls, timeout)
 	if err != nil {
-		handleError(w, err)
-		return
+		return handleError(c, err)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	return c.JSON(200, map[string]any{
 		"id":     taskID,
 		"status": "PROCESS",
 	})
 }
 
-func (h *Handler) GetDownload(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
+func (h *Handler) GetDownload(c *echo.Context) error {
+	idStr := c.Param("id")
 	taskID, err := strconv.Atoi(idStr)
 	if err != nil {
-		handleError(w, domain.ErrClient)
-		return
+		return handleError(c, domain.ErrClient)
 	}
 
-	task, err := h.service.GetDownload(r.Context(), taskID)
+	task, err := h.service.GetDownload(c.Request().Context(), taskID)
 	if err != nil {
-		handleError(w, err)
-		return
+		return handleError(c, err)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(task)
+	return c.JSON(200, task)
 }
 
-func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
-	taskID, err := strconv.Atoi(r.PathValue("id"))
+func (h *Handler) GetFile(c *echo.Context) error {
+	taskID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		handleError(w, domain.ErrClient)
-		return
+		return handleError(c, domain.ErrClient)
 	}
-	fileID, err := strconv.Atoi(r.PathValue("file_id"))
+	fileID, err := strconv.Atoi(c.Param("file_id"))
 	if err != nil {
-		handleError(w, domain.ErrClient)
-		return
+		return handleError(c, domain.ErrClient)
 	}
-	content, err := h.service.GetFileContent(r.Context(), taskID, fileID)
+	content, err := h.service.GetFileContent(c.Request().Context(), taskID, fileID)
 	if err != nil {
-		handleError(w, err)
-		return
+		return handleError(c, err)
 	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Write(content)
+	return c.Blob(200, "application/octet-stream", content)
 }
 
-func (h *Handler) InitRoutes() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /downloads", h.StartDownload)
-	mux.HandleFunc("GET /downloads/{id}", h.GetDownload)
-	mux.HandleFunc("GET /downloads/{id}/files/{file_id}", h.GetFile)
-	return mux
+func (h *Handler) InitRoutes() *echo.Echo {
+	e := echo.New()
+	e.POST("/downloads", h.StartDownload)
+	e.GET("/downloads/:id", h.GetDownload)
+	e.GET("/downloads/:id/files/:file_id", h.GetFile)
+	return e
 }
