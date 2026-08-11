@@ -25,15 +25,14 @@ func main() {
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
 		cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name)
 
-	db, err := sqlx.Connect("pgx", connStr)
+	startupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	db, err := sqlx.ConnectContext(startupCtx, "pgx", connStr)
 	if err != nil {
 		log.Fatalf("sqlx can't connect db %v", err)
 	}
 	defer db.Close()
-
-	if err := db.Ping(); err != nil {
-		log.Fatalf("database cant start %v", err)
-	}
 	log.Println("DB OK")
 
 	repo := repository.NewPostgresRepo(db)
