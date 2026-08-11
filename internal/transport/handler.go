@@ -36,7 +36,7 @@ func handleError(w http.ResponseWriter, err error) {
 
 func (h *Handler) StartDownload(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Files   []struct {
+		Files []struct {
 			URL string `json:"url"`
 		} `json:"files"`
 		Timeout string `json:"timeout"`
@@ -55,11 +55,6 @@ func (h *Handler) StartDownload(w http.ResponseWriter, r *http.Request) {
 	var urls []string
 	for _, f := range req.Files {
 		urls = append(urls, f.URL)
-	}
-
-	if len(urls) == 0 {
-		http.Error(w, "files array is empty or missing (make sure to use 'files' key)", http.StatusBadRequest)
-		return
 	}
 
 	taskID, err := h.service.StartDownload(r.Context(), urls, timeout)

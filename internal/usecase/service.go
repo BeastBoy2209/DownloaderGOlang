@@ -7,12 +7,13 @@ import (
 	"log"
 	"net/http"
 
-	"golang.org/x/sync/errgroup"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type DownloadService struct {
-	repo domain.Repository
+	repo   domain.Repository
 	client *http.Client
 }
 
@@ -21,18 +22,18 @@ func NewDownloadService(r domain.Repository, client *http.Client) *DownloadServi
 		client = http.DefaultClient
 	}
 	return &DownloadService{
-		repo: r,
+		repo:   r,
 		client: client,
 	}
 }
 
-
-//test +
-func (d *DownloadService) GetDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) { 
+// test +
+func (d *DownloadService) GetDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) {
 	task, err := d.repo.RecieveDownload(ctx, taskID)
 	return task, err
 }
-//test +
+
+// test +
 func (d *DownloadService) GetFileContent(ctx context.Context, taskID int, fileID int) ([]byte, error) {
 	content, err := d.repo.GetFile(ctx, taskID, fileID)
 	if err != nil {
@@ -41,7 +42,7 @@ func (d *DownloadService) GetFileContent(ctx context.Context, taskID int, fileID
 	return content, err
 }
 
-//test +
+// test +
 func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, file domain.File) {
 	url := file.URL
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -50,11 +51,11 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 		d.repo.SaveFile(ctx, taskID, file.ID, "ERROR", nil)
 		return
 	}
-	
+
 	// чтобы cloudflare не блокал
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-    resp, err := d.client.Do(req)
+	resp, err := d.client.Do(req)
 	if err != nil {
 		log.Printf("[Task %d] downloading error %s: %v", taskID, url, err)
 		d.repo.SaveFile(ctx, taskID, file.ID, "ERROR", nil)
@@ -84,10 +85,10 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 	d.repo.SaveFile(ctx, taskID, file.ID, "", bytes)
 }
 
-//test+
+// test+
 func (d *DownloadService) runBackgroundProcess(ctx context.Context, cancel context.CancelFunc, taskID int, files []domain.File) {
 	defer cancel()
-	
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(10) // лимит го рутин
 
@@ -98,13 +99,17 @@ func (d *DownloadService) runBackgroundProcess(ctx context.Context, cancel conte
 			return nil
 		})
 	}
-	
+
 	_ = eg.Wait()
 	d.repo.UpdateStatus(context.Background(), taskID, "DONE")
 }
 
-//test+
+// test+
 func (d *DownloadService) StartDownload(ctx context.Context, urls []string, timeout time.Duration) (int, error) {
+	if len(urls) == 0 {
+		return 0, domain.ErrBusiness
+	}
+
 	var files []domain.File
 	for _, u := range urls {
 		files = append(files, domain.File{URL: u})

@@ -16,12 +16,14 @@ import (
 	"downloader/internal/domain"
 	"downloader/internal/mocks"
 )
+
 type roundTripperFunc func(req *http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 func newMockHTTPClient(fn roundTripperFunc) *http.Client {
 	return &http.Client{Transport: fn}
 }
+
 var okHTTPClient = newMockHTTPClient(func(req *http.Request) (*http.Response, error) {
 	return &http.Response{
 		StatusCode: http.StatusOK,
@@ -245,58 +247,72 @@ func TestDownloadService_runBackgroundProcess(t *testing.T) {
 }
 
 func TestDownloadService_StartDownload(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	repoMock := mocks.NewMockRepository(ctrl)
+	t.Run("success", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		repoMock := mocks.NewMockRepository(ctrl)
 
-	urls := []string{"https://123.com/one", "https://123.com/two"}
-	timeout := 200 * time.Millisecond
-	expectedID := 777
+		urls := []string{"https://123.com/one", "https://123.com/two"}
+		timeout := 200 * time.Millisecond
+		expectedID := 777
 
-	repoMock.EXPECT().
-		TaskCreation(gomock.Any(), gomock.AssignableToTypeOf(&domain.DownloadTask{})).
-		DoAndReturn(func(_ context.Context, task *domain.DownloadTask) (int, error) {
-			assert.Equal(t, "PROCESS", task.Status)
-			assert.Len(t, task.Files, len(urls))
-			for i, f := range task.Files {
-				assert.Equal(t, urls[i], f.URL)
-			}
-			return expectedID, nil
-		}).
-		Times(1)
-
-	done := make(chan struct{}, len(urls)+1)
-
-	for range urls {
 		repoMock.EXPECT().
-			SaveFile(gomock.Any(), expectedID, gomock.Any(), gomock.Any(), gomock.Any()).
-			Do(func(_ context.Context, _ int, _ int, _ string, _ []byte) { done <- struct{}{} }).
+			TaskCreation(gomock.Any(), gomock.AssignableToTypeOf(&domain.DownloadTask{})).
+			DoAndReturn(func(_ context.Context, task *domain.DownloadTask) (int, error) {
+				assert.Equal(t, "PROCESS", task.Status)
+				assert.Len(t, task.Files, len(urls))
+				for i, f := range task.Files {
+					assert.Equal(t, urls[i], f.URL)
+				}
+				return expectedID, nil
+			}).
 			Times(1)
-	}
-	repoMock.EXPECT().
-		UpdateStatus(gomock.Any(), expectedID, "DONE").
-		Do(func(_ context.Context, _ int, _ string) { done <- struct{}{} }).
-		Times(1)
 
-	mockClient := newMockHTTPClient(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(bytes.NewBufferString("file content")),
-			Header:     make(http.Header),
-		}, nil
+		done := make(chan struct{}, len(urls)+1)
+
+		for range urls {
+			repoMock.EXPECT().
+				SaveFile(gomock.Any(), expectedID, gomock.Any(), gomock.Any(), gomock.Any()).
+				Do(func(_ context.Context, _ int, _ int, _ string, _ []byte) { done <- struct{}{} }).
+				Times(1)
+		}
+		repoMock.EXPECT().
+			UpdateStatus(gomock.Any(), expectedID, "DONE").
+			Do(func(_ context.Context, _ int, _ string) { done <- struct{}{} }).
+			Times(1)
+
+		mockClient := newMockHTTPClient(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString("file content")),
+				Header:     make(http.Header),
+			}, nil
+		})
+
+		svc := NewDownloadService(repoMock, mockClient)
+		id, err := svc.StartDownload(context.Background(), urls, timeout)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedID, id)
+
+		timeoutWait := time.After(2 * time.Second)
+		for i := 0; i < len(urls)+1; i++ {
+			select {
+			case <-done:
+			case <-timeoutWait:
+				t.Fatalf("timeout: background process didn't finish")
+			}
+		}
 	})
 
-	svc := NewDownloadService(repoMock, mockClient)
-	id, err := svc.StartDownload(context.Background(), urls, timeout)
-	assert.NoError(t, err)
-	assert.Equal(t, expectedID, id)
+	t.Run("empty urls returns business error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		repoMock := mocks.NewMockRepository(ctrl)
 
-	timeoutWait := time.After(2 * time.Second)
-	for i := 0; i < len(urls)+1; i++ {
-		select {
-		case <-done:
-		case <-timeoutWait:
-			t.Fatalf("timeout: background process didn't finish")
-		}
-	}
+		svc := NewDownloadService(repoMock, nil)
+		id, err := svc.StartDownload(context.Background(), nil, time.Second)
+
+		assert.ErrorIs(t, err, domain.ErrBusiness)
+		assert.Zero(t, id)
+	})
 }
