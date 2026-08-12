@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-
+	
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
@@ -21,9 +22,20 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
-		cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name)
+cfg := config.Load()
+    urll := url.URL{
+        Scheme: "postgres",
+        User:   url.UserPassword(cfg.DB.User, cfg.DB.Password),
+        Host:   fmt.Sprintf("%s:%d", cfg.DB.Host, cfg.DB.Port),
+        Path:   "/" + cfg.DB.Name,
+    }
+
+    q := urll.Query()
+    q.Set("sslmode", "disable")
+    urll.RawQuery = q.Encode()
+    connStr := urll.String()
+	// connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
+	// 	cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name)
 
 	startupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
