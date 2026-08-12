@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-	
+
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
@@ -22,49 +22,49 @@ import (
 )
 
 func main() {
-cfg := config.Load()
-    urll := url.URL{
-        Scheme: "postgres",
-        User:   url.UserPassword(cfg.DB.User, cfg.DB.Password),
-        Host:   fmt.Sprintf("%s:%d", cfg.DB.Host, cfg.DB.Port),
-        Path:   "/" + cfg.DB.Name,
-    }
-
-    q := urll.Query()
-    q.Set("sslmode", "disable")
-    urll.RawQuery = q.Encode()
-    connStr := urll.String()
-	// connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable",
-	// 	cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Name)
-
+	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})
+	logger := slog.New(jsonHandler)
+	slog.SetDefault(logger)
+	cfg := config.Load()
+	urll := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(cfg.DB.User, cfg.DB.Password),
+		Host:   fmt.Sprintf("%s:%d", cfg.DB.Host, cfg.DB.Port),
+		Path:   "/" + cfg.DB.Name,
+	}
+	q := urll.Query()
+	q.Set("sslmode", "disable")
+	urll.RawQuery = q.Encode()
+	connStr := urll.String()
 	startupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	db, err := sqlx.ConnectContext(startupCtx, "pgx", connStr)
 	if err != nil {
-		log.Fatalf("sqlx can't connect db %v", err)
+		slog.Error("sqlx can't connect to db", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	defer db.Close()
-	log.Println("DB OK")
+	slog.Info("DB OK")
 
 	repo := repository.NewPostgresRepo(db)
 	service := usecase.NewDownloadService(repo, nil)
 	handler := transport.NewHandler(service)
 
 	e := handler.InitRoutes()
-
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
-	log.Printf("PORT: %s", addr)
-
 	server := &http.Server{
 		Addr:    addr,
 		Handler: e,
 	}
 
 	go func() {
-		log.Printf("Server started on port %d", cfg.Server.Port)
+		slog.Info("Server started", slog.Int("port", int(cfg.Server.Port)))
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("server error %v", err)
+			slog.Error("server error", slog.String("error", err.Error()))
+			os.Exit(1)
 		}
 	}()
 
@@ -72,14 +72,14 @@ cfg := config.Load()
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	<-quit
-	log.Println("Starting shutdown...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-	defer cancel()
+	slog.Info("Starting shutdown...")
+	ctx, cancelShutdown := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancelShutdown()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server was stopped cause error or timeout: %v", err)
+		slog.Error("Server was stopped cause error or timeout", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
-	log.Println("server was successfully shut down")
+	slog.Info("server was successfully shut down")
 }
