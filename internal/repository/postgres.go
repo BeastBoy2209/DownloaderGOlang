@@ -17,7 +17,7 @@ func NewPostgresRepo(db *sqlx.DB) *PostgresRepo {
 	return &PostgresRepo{db: db}
 }
 
-func (r *PostgresRepo) TaskCreation(ctx context.Context, task *domain.DownloadTask) (int, error) {
+func (r *PostgresRepo) CreateDownloadAndFiles(ctx context.Context, task *domain.DownloadTask) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -35,7 +35,7 @@ func (r *PostgresRepo) TaskCreation(ctx context.Context, task *domain.DownloadTa
 	return taskID, nil
 }
 
-func (r *PostgresRepo) SaveFile(ctx context.Context, taskID int, fileID int, errCode string, content []byte) error {
+func (r *PostgresRepo) UpdateFile(ctx context.Context, taskID int, fileID int, errCode string, content []byte) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -48,7 +48,7 @@ func (r *PostgresRepo) SaveFile(ctx context.Context, taskID int, fileID int, err
 	return err
 }
 
-func (r *PostgresRepo) UpdateStatus(ctx context.Context, taskID int, newStatus string) error {
+func (r *PostgresRepo) UpdateDownloadStatus(ctx context.Context, taskID int, newStatus string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -56,7 +56,7 @@ func (r *PostgresRepo) UpdateStatus(ctx context.Context, taskID int, newStatus s
 	return err
 }
 
-func (r *PostgresRepo) GetFile(ctx context.Context, taskID int, fileID int) ([]byte, error) {
+func (r *PostgresRepo) GetFileContent(ctx context.Context, taskID int, fileID int) ([]byte, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -73,7 +73,7 @@ func (r *PostgresRepo) GetFile(ctx context.Context, taskID int, fileID int) ([]b
 	return rows[0].Content, nil
 }
 
-func (r *PostgresRepo) RecieveDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) {
+func (r *PostgresRepo) GetDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

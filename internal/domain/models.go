@@ -21,9 +21,9 @@ type DownloadTask struct {
 }
 
 type Repository interface {
-	GetFile(context.Context, int, int) ([]byte, error)
-	TaskCreation(context.Context, *DownloadTask) (int, error)
-	RecieveDownload(context.Context, int) (DownloadTask, error)
-	UpdateStatus(context.Context, int, string) error
-	SaveFile(context.Context, int, int, string, []byte) error
+	GetFileContent(context.Context, int, int) ([]byte, error)
+	CreateDownloadAndFiles(context.Context, *DownloadTask) (int, error)
+	GetDownload(context.Context, int) (DownloadTask, error)
+	UpdateDownloadStatus(context.Context, int, string) error
+	UpdateFile(context.Context, int, int, string, []byte) error
 }

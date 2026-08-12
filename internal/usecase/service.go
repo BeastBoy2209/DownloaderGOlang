@@ -29,13 +29,13 @@ func NewDownloadService(r domain.Repository, client *http.Client) *DownloadServi
 
 // test +
 func (d *DownloadService) GetDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) {
-	task, err := d.repo.RecieveDownload(ctx, taskID)
+	task, err := d.repo.GetDownload(ctx, taskID)
 	return task, err
 }
 
 // test +
 func (d *DownloadService) GetFileContent(ctx context.Context, taskID int, fileID int) ([]byte, error) {
-	content, err := d.repo.GetFile(ctx, taskID, fileID)
+	content, err := d.repo.GetFileContent(ctx, taskID, fileID)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		log.Printf("[Task %d] Creation request error %s: %v", taskID, url, err)
-		d.repo.SaveFile(ctx, taskID, file.ID, "ERROR", nil)
+		d.repo.UpdateFile(ctx, taskID, file.ID, "ERROR", nil)
 		return
 	}
 
@@ -58,21 +58,21 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 	resp, err := d.client.Do(req)
 	if err != nil {
 		log.Printf("[Task %d] downloading error %s: %v", taskID, url, err)
-		d.repo.SaveFile(ctx, taskID, file.ID, "ERROR", nil)
+		d.repo.UpdateFile(ctx, taskID, file.ID, "ERROR", nil)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("[Task %d] no content or server error %s [error: %d]", taskID, url, resp.StatusCode)
-		d.repo.SaveFile(ctx, taskID, file.ID, "ERROR", nil)
+		d.repo.UpdateFile(ctx, taskID, file.ID, "ERROR", nil)
 		return
 	}
 
 	bytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("[Task %d] bodyreading error %s: %v", taskID, url, err)
-		d.repo.SaveFile(ctx, taskID, file.ID, "ERROR", nil)
+		d.repo.UpdateFile(ctx, taskID, file.ID, "ERROR", nil)
 		return
 	}
 
@@ -82,7 +82,7 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 		log.Printf("[Task %d] OK (%d b), link:  %s", taskID, len(bytes), url)
 	}
 
-	d.repo.SaveFile(ctx, taskID, file.ID, "", bytes)
+	d.repo.UpdateFile(ctx, taskID, file.ID, "", bytes)
 }
 
 // test+
@@ -101,7 +101,7 @@ func (d *DownloadService) runBackgroundProcess(ctx context.Context, cancel conte
 	}
 
 	_ = eg.Wait()
-	d.repo.UpdateStatus(context.Background(), taskID, "DONE")
+	d.repo.UpdateDownloadStatus(context.Background(), taskID, "DONE")
 }
 
 // test+
@@ -119,7 +119,7 @@ func (d *DownloadService) StartDownload(ctx context.Context, urls []string, time
 		Files:  files,
 	}
 
-	id, err := d.repo.TaskCreation(ctx, &task)
+	id, err := d.repo.CreateDownloadAndFiles(ctx, &task)
 	if err != nil {
 		return 0, domain.ErrServer
 	}

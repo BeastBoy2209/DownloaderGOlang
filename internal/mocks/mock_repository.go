@@ -41,75 +41,75 @@ func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 	return m.recorder
 }
 
-// GetFile mocks base method.
-func (m *MockRepository) GetFile(arg0 context.Context, arg1, arg2 int) ([]byte, error) {
+// GetFileContent mocks base method.
+func (m *MockRepository) GetFileContent(arg0 context.Context, arg1, arg2 int) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetFile", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "GetFileContent", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetFile indicates an expected call of GetFile.
-func (mr *MockRepositoryMockRecorder) GetFile(arg0, arg1, arg2 any) *gomock.Call {
+// GetFileContent indicates an expected call of GetFileContent.
+func (mr *MockRepositoryMockRecorder) GetFileContent(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFile", reflect.TypeOf((*MockRepository)(nil).GetFile), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFileContent", reflect.TypeOf((*MockRepository)(nil).GetFileContent), arg0, arg1, arg2)
 }
 
-// RecieveDownload mocks base method.
-func (m *MockRepository) RecieveDownload(arg0 context.Context, arg1 int) (domain.DownloadTask, error) {
+// CreateDownloadAndFiles mocks base method.
+func (m *MockRepository) CreateDownloadAndFiles(arg0 context.Context, arg1 *domain.DownloadTask) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RecieveDownload", arg0, arg1)
-	ret0, _ := ret[0].(domain.DownloadTask)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RecieveDownload indicates an expected call of RecieveDownload.
-func (mr *MockRepositoryMockRecorder) RecieveDownload(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecieveDownload", reflect.TypeOf((*MockRepository)(nil).RecieveDownload), arg0, arg1)
-}
-
-// SaveFile mocks base method.
-func (m *MockRepository) SaveFile(arg0 context.Context, arg1, arg2 int, arg3 string, arg4 []byte) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SaveFile", arg0, arg1, arg2, arg3, arg4)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SaveFile indicates an expected call of SaveFile.
-func (mr *MockRepositoryMockRecorder) SaveFile(arg0, arg1, arg2, arg3, arg4 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveFile", reflect.TypeOf((*MockRepository)(nil).SaveFile), arg0, arg1, arg2, arg3, arg4)
-}
-
-// TaskCreation mocks base method.
-func (m *MockRepository) TaskCreation(arg0 context.Context, arg1 *domain.DownloadTask) (int, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TaskCreation", arg0, arg1)
+	ret := m.ctrl.Call(m, "CreateDownloadAndFiles", arg0, arg1)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// TaskCreation indicates an expected call of TaskCreation.
-func (mr *MockRepositoryMockRecorder) TaskCreation(arg0, arg1 any) *gomock.Call {
+// CreateDownloadAndFiles indicates an expected call of CreateDownloadAndFiles.
+func (mr *MockRepositoryMockRecorder) CreateDownloadAndFiles(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskCreation", reflect.TypeOf((*MockRepository)(nil).TaskCreation), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDownloadAndFiles", reflect.TypeOf((*MockRepository)(nil).CreateDownloadAndFiles), arg0, arg1)
 }
 
-// UpdateStatus mocks base method.
-func (m *MockRepository) UpdateStatus(arg0 context.Context, arg1 int, arg2 string) error {
+// GetDownload mocks base method.
+func (m *MockRepository) GetDownload(arg0 context.Context, arg1 int) (domain.DownloadTask, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateStatus", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "GetDownload", arg0, arg1)
+	ret0, _ := ret[0].(domain.DownloadTask)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDownload indicates an expected call of GetDownload.
+func (mr *MockRepositoryMockRecorder) GetDownload(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDownload", reflect.TypeOf((*MockRepository)(nil).GetDownload), arg0, arg1)
+}
+
+// UpdateDownloadStatus mocks base method.
+func (m *MockRepository) UpdateDownloadStatus(arg0 context.Context, arg1 int, arg2 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateDownloadStatus", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// UpdateStatus indicates an expected call of UpdateStatus.
-func (mr *MockRepositoryMockRecorder) UpdateStatus(arg0, arg1, arg2 any) *gomock.Call {
+// UpdateDownloadStatus indicates an expected call of UpdateDownloadStatus.
+func (mr *MockRepositoryMockRecorder) UpdateDownloadStatus(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStatus", reflect.TypeOf((*MockRepository)(nil).UpdateStatus), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDownloadStatus", reflect.TypeOf((*MockRepository)(nil).UpdateDownloadStatus), arg0, arg1, arg2)
+}
+
+// UpdateFile mocks base method.
+func (m *MockRepository) UpdateFile(arg0 context.Context, arg1, arg2 int, arg3 string, arg4 []byte) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateFile", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateFile indicates an expected call of UpdateFile.
+func (mr *MockRepositoryMockRecorder) UpdateFile(arg0, arg1, arg2, arg3, arg4 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFile", reflect.TypeOf((*MockRepository)(nil).UpdateFile), arg0, arg1, arg2, arg3, arg4)
 }

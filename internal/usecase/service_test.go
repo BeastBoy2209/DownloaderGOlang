@@ -47,7 +47,7 @@ func TestDownloadService_GetDownload(t *testing.T) {
 		Files:  []domain.File{{ID: 1, URL: "https://example.com/file1"}},
 	}
 	mockRepo.EXPECT().
-		RecieveDownload(gomock.Any(), 42).
+		GetDownload(gomock.Any(), 42).
 		Return(expectedTask, nil).
 		Times(1)
 
@@ -73,7 +73,7 @@ func TestDownloadService_GetFileContent(t *testing.T) {
 			fileID: 7,
 			mockSetup: func(repo *mocks.MockRepository) {
 				repo.EXPECT().
-					GetFile(gomock.Any(), 42, 7).
+					GetFileContent(gomock.Any(), 42, 7).
 					Return([]byte("payload"), nil).
 					Times(1)
 			},
@@ -85,7 +85,7 @@ func TestDownloadService_GetFileContent(t *testing.T) {
 			fileID: 2,
 			mockSetup: func(repo *mocks.MockRepository) {
 				repo.EXPECT().
-					GetFile(gomock.Any(), 13, 2).
+					GetFileContent(gomock.Any(), 13, 2).
 					Return(nil, domain.ErrServer).
 					Times(1)
 			},
@@ -127,7 +127,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 			file:       domain.File{ID: 1, URL: "://bad_url"},
 			httpClient: newMockHTTPClient(func(req *http.Request) (*http.Response, error) { return nil, nil }),
 			expectSave: func(repo *mocks.MockRepository) {
-				repo.EXPECT().SaveFile(gomock.Any(), gomock.Any(), 1, "ERROR", nil).Times(1)
+				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 1, "ERROR", nil).Times(1)
 			},
 			wantLogSubstr: "Creation request error",
 		},
@@ -138,7 +138,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 				return nil, errors.New("network down")
 			}),
 			expectSave: func(repo *mocks.MockRepository) {
-				repo.EXPECT().SaveFile(gomock.Any(), gomock.Any(), 2, "ERROR", nil).Times(1)
+				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 2, "ERROR", nil).Times(1)
 			},
 			wantLogSubstr: "downloading error",
 		},
@@ -152,7 +152,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 				}, nil
 			}),
 			expectSave: func(repo *mocks.MockRepository) {
-				repo.EXPECT().SaveFile(gomock.Any(), gomock.Any(), 3, "ERROR", nil).Times(1)
+				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 3, "ERROR", nil).Times(1)
 			},
 			wantLogSubstr: "no content or server error",
 		},
@@ -166,7 +166,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 				}, nil
 			}),
 			expectSave: func(repo *mocks.MockRepository) {
-				repo.EXPECT().SaveFile(gomock.Any(), gomock.Any(), 4, "ERROR", nil).Times(1)
+				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 4, "ERROR", nil).Times(1)
 			},
 			wantLogSubstr: "bodyreading error",
 		},
@@ -180,7 +180,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 				}, nil
 			}),
 			expectSave: func(repo *mocks.MockRepository) {
-				repo.EXPECT().SaveFile(gomock.Any(), gomock.Any(), 5, "", []byte{}).Times(1)
+				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 5, "", []byte{}).Times(1)
 			},
 			wantLogSubstr: "is empty 0KB",
 		},
@@ -194,7 +194,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 				}, nil
 			}),
 			expectSave: func(repo *mocks.MockRepository) {
-				repo.EXPECT().SaveFile(gomock.Any(), gomock.Any(), 6, "", []byte("hello world")).Times(1)
+				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 6, "", []byte("hello world")).Times(1)
 			},
 			wantLogSubstr: "OK (11 b)",
 		},
@@ -236,9 +236,9 @@ func TestDownloadService_runBackgroundProcess(t *testing.T) {
 	taskID := 123
 
 	for _, f := range files {
-		mockRepo.EXPECT().SaveFile(gomock.Any(), taskID, f.ID, "", []byte("data")).Times(1)
+		mockRepo.EXPECT().UpdateFile(gomock.Any(), taskID, f.ID, "", []byte("data")).Times(1)
 	}
-	mockRepo.EXPECT().UpdateStatus(gomock.Any(), taskID, "DONE").Times(1)
+	mockRepo.EXPECT().UpdateDownloadStatus(gomock.Any(), taskID, "DONE").Times(1)
 
 	svc := NewDownloadService(mockRepo, okHTTPClient)
 
@@ -257,7 +257,7 @@ func TestDownloadService_StartDownload(t *testing.T) {
 		expectedID := 777
 
 		repoMock.EXPECT().
-			TaskCreation(gomock.Any(), gomock.AssignableToTypeOf(&domain.DownloadTask{})).
+			CreateDownloadAndFiles(gomock.Any(), gomock.AssignableToTypeOf(&domain.DownloadTask{})).
 			DoAndReturn(func(_ context.Context, task *domain.DownloadTask) (int, error) {
 				assert.Equal(t, "PROCESS", task.Status)
 				assert.Len(t, task.Files, len(urls))
@@ -272,12 +272,12 @@ func TestDownloadService_StartDownload(t *testing.T) {
 
 		for range urls {
 			repoMock.EXPECT().
-				SaveFile(gomock.Any(), expectedID, gomock.Any(), gomock.Any(), gomock.Any()).
+				UpdateFile(gomock.Any(), expectedID, gomock.Any(), gomock.Any(), gomock.Any()).
 				Do(func(_ context.Context, _ int, _ int, _ string, _ []byte) { done <- struct{}{} }).
 				Times(1)
 		}
 		repoMock.EXPECT().
-			UpdateStatus(gomock.Any(), expectedID, "DONE").
+			UpdateDownloadStatus(gomock.Any(), expectedID, "DONE").
 			Do(func(_ context.Context, _ int, _ string) { done <- struct{}{} }).
 			Times(1)
 
