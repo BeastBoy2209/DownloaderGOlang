@@ -2,16 +2,15 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"downloader/internal/domain"
 	"errors"
-	"sync"
 
 	"github.com/jmoiron/sqlx"
 )
 
 type PostgresRepo struct {
 	db *sqlx.DB
-	mu sync.Mutex
 }
 
 func NewPostgresRepo(db *sqlx.DB) *PostgresRepo {
@@ -19,14 +18,24 @@ func NewPostgresRepo(db *sqlx.DB) *PostgresRepo {
 }
 
 func (r *PostgresRepo) CreateDownloadAndFiles(ctx context.Context, task *domain.DownloadTask) (int, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
-	rows, err := r.db.NamedQueryContext(ctx, `
+	query, args, err := sqlx.Named(`
 		INSERT INTO downloads (status)
 		VALUES (:status)
 		RETURNING id
 	`, downloadCreateParams{Status: task.Status})
+	if err != nil {
+		return 0, err
+	}
+	query = tx.Rebind(query)
+	rows, err := tx.QueryxContext(ctx, query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -40,13 +49,21 @@ func (r *PostgresRepo) CreateDownloadAndFiles(ctx context.Context, task *domain.
 	if err := rows.Scan(&taskID); err != nil {
 		return 0, err
 	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
 
 	for i := range task.Files {
-		rows, err := r.db.NamedQueryContext(ctx, `
+		query, args, err := sqlx.Named(`
 			INSERT INTO files (download_id, url)
 			VALUES (:download_id, :url)
 			RETURNING id
 		`, fileCreateParams{DownloadID: taskID, URL: task.Files[i].URL})
+		if err != nil {
+			return 0, err
+		}
+		query = tx.Rebind(query)
+		rows, err := tx.QueryxContext(ctx, query, args...)
 		if err != nil {
 			return 0, err
 		}
@@ -62,19 +79,27 @@ func (r *PostgresRepo) CreateDownloadAndFiles(ctx context.Context, task *domain.
 			return 0, err
 		}
 	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 	return taskID, nil
 }
 
 func (r *PostgresRepo) UpdateFile(ctx context.Context, taskID int, fileID int, errCode string, content []byte) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
 	var ec *string
 	if errCode != "" {
 		ec = &errCode
 	}
 
-	_, err := r.db.NamedExecContext(ctx, `
+	query, args, err := sqlx.Named(`
 		UPDATE files
 		SET error_code = :error_code,
 		    content = :content
@@ -85,30 +110,63 @@ func (r *PostgresRepo) UpdateFile(ctx context.Context, taskID int, fileID int, e
 		ErrorCode:  ec,
 		Content:    content,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	query = tx.Rebind(query)
+	_, err = tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (r *PostgresRepo) UpdateDownloadStatus(ctx context.Context, taskID int, newStatus string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
-	_, err := r.db.NamedExecContext(ctx, `
+	query, args, err := sqlx.Named(`
 		UPDATE downloads
 		SET status = :status
 		WHERE id = :id
 	`, downloadUpdateStatusParams{ID: taskID, Status: newStatus})
-	return err
+	if err != nil {
+		return err
+	}
+	query = tx.Rebind(query)
+	_, err = tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (r *PostgresRepo) GetFileContent(ctx context.Context, taskID int, fileID int) ([]byte, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
-	rows, err := r.db.NamedQueryContext(ctx, `
+	query, args, err := sqlx.Named(`
 		SELECT content
 		FROM files
 		WHERE id = :id AND download_id = :download_id
 	`, fileContentParams{DownloadID: taskID, ID: fileID})
+	if err != nil {
+		return nil, err
+	}
+	query = tx.Rebind(query)
+	rows, err := tx.QueryxContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -123,18 +181,32 @@ func (r *PostgresRepo) GetFileContent(ctx context.Context, taskID int, fileID in
 		return nil, err
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
 	return content, nil
 }
 
 func (r *PostgresRepo) GetDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return domain.DownloadTask{}, err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
-	rows, err := r.db.NamedQueryContext(ctx, `
+	query, args, err := sqlx.Named(`
 		SELECT id, status
 		FROM downloads
 		WHERE id = :id
 	`, downloadIDParams{ID: taskID})
+	if err != nil {
+		return domain.DownloadTask{}, err
+	}
+	query = tx.Rebind(query)
+	rows, err := tx.QueryxContext(ctx, query, args...)
 	if err != nil {
 		return domain.DownloadTask{}, err
 	}
@@ -149,11 +221,16 @@ func (r *PostgresRepo) GetDownload(ctx context.Context, taskID int) (domain.Down
 		return domain.DownloadTask{}, err
 	}
 
-	fileRows, err := r.db.NamedQueryContext(ctx, `
+	query, args, err = sqlx.Named(`
 		SELECT id, download_id, url, error_code
 		FROM files
 		WHERE download_id = :download_id
 	`, fileDownloadParams{DownloadID: taskID})
+	if err != nil {
+		return domain.DownloadTask{}, err
+	}
+	query = tx.Rebind(query)
+	fileRows, err := tx.QueryxContext(ctx, query, args...)
 	if err != nil {
 		return domain.DownloadTask{}, err
 	}
@@ -173,6 +250,10 @@ func (r *PostgresRepo) GetDownload(ctx context.Context, taskID int) (domain.Down
 		result.Files = append(result.Files, file)
 	}
 	if err := fileRows.Err(); err != nil {
+		return result, err
+	}
+
+	if err := tx.Commit(); err != nil {
 		return result, err
 	}
 
