@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"downloader/internal/domain"
+	"errors"
 	"sync"
 
 	"github.com/jmoiron/sqlx"
@@ -21,14 +22,43 @@ func (r *PostgresRepo) CreateDownloadAndFiles(ctx context.Context, task *domain.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var taskID int
-	err := r.db.GetContext(ctx, &taskID, "INSERT INTO downloads (status) VALUES ($1) RETURNING id", task.Status)
+	rows, err := r.db.NamedQueryContext(ctx, `
+		INSERT INTO downloads (status)
+		VALUES (:status)
+		RETURNING id
+	`, downloadCreateParams{Status: task.Status})
 	if err != nil {
 		return 0, err
 	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return 0, errors.New("download id was not returned")
+	}
+
+	var taskID int
+	if err := rows.Scan(&taskID); err != nil {
+		return 0, err
+	}
+
 	for i := range task.Files {
-		err := r.db.GetContext(ctx, &task.Files[i].ID, "INSERT INTO files (download_id, url) VALUES ($1, $2) RETURNING id", taskID, task.Files[i].URL)
+		rows, err := r.db.NamedQueryContext(ctx, `
+			INSERT INTO files (download_id, url)
+			VALUES (:download_id, :url)
+			RETURNING id
+		`, fileCreateParams{DownloadID: taskID, URL: task.Files[i].URL})
 		if err != nil {
+			return 0, err
+		}
+		if !rows.Next() {
+			rows.Close()
+			return 0, errors.New("file id was not returned")
+		}
+		if err := rows.Scan(&task.Files[i].ID); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		if err := rows.Close(); err != nil {
 			return 0, err
 		}
 	}
@@ -44,7 +74,17 @@ func (r *PostgresRepo) UpdateFile(ctx context.Context, taskID int, fileID int, e
 		ec = &errCode
 	}
 
-	_, err := r.db.ExecContext(ctx, "UPDATE files SET error_code = $1, content = $2 WHERE id = $3 AND download_id = $4", ec, content, fileID, taskID)
+	_, err := r.db.NamedExecContext(ctx, `
+		UPDATE files
+		SET error_code = :error_code,
+		    content = :content
+		WHERE id = :id AND download_id = :download_id
+	`, fileUpdateParams{
+		DownloadID: taskID,
+		ID:         fileID,
+		ErrorCode:  ec,
+		Content:    content,
+	})
 	return err
 }
 
@@ -52,7 +92,11 @@ func (r *PostgresRepo) UpdateDownloadStatus(ctx context.Context, taskID int, new
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	_, err := r.db.ExecContext(ctx, "UPDATE downloads SET status = $1 WHERE id = $2", newStatus, taskID)
+	_, err := r.db.NamedExecContext(ctx, `
+		UPDATE downloads
+		SET status = :status
+		WHERE id = :id
+	`, downloadUpdateStatusParams{ID: taskID, Status: newStatus})
 	return err
 }
 
@@ -60,52 +104,77 @@ func (r *PostgresRepo) GetFileContent(ctx context.Context, taskID int, fileID in
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var rows []struct {
-		Content []byte `db:"content"`
-	}
-	err := r.db.SelectContext(ctx, &rows, "SELECT content FROM files WHERE id = $1 AND download_id = $2", fileID, taskID)
+	rows, err := r.db.NamedQueryContext(ctx, `
+		SELECT content
+		FROM files
+		WHERE id = :id AND download_id = :download_id
+	`, fileContentParams{DownloadID: taskID, ID: fileID})
 	if err != nil {
 		return nil, err
 	}
-	if len(rows) == 0 {
+	defer rows.Close()
+
+	if !rows.Next() {
 		return nil, domain.ErrClient
 	}
-	return rows[0].Content, nil
+
+	var content []byte
+	if err := rows.Scan(&content); err != nil {
+		return nil, err
+	}
+
+	return content, nil
 }
 
 func (r *PostgresRepo) GetDownload(ctx context.Context, taskID int) (domain.DownloadTask, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var tasks []domain.DownloadTask
-	err := r.db.SelectContext(ctx, &tasks, "SELECT id, status FROM downloads WHERE id = $1", taskID)
+	rows, err := r.db.NamedQueryContext(ctx, `
+		SELECT id, status
+		FROM downloads
+		WHERE id = :id
+	`, downloadIDParams{ID: taskID})
 	if err != nil {
 		return domain.DownloadTask{}, err
 	}
-	if len(tasks) == 0 {
+	defer rows.Close()
+
+	if !rows.Next() {
 		return domain.DownloadTask{}, domain.ErrClient
 	}
-	task := tasks[0]
 
-	type fileRow struct {
-		ID        int    `db:"id"`
-		URL       string `db:"url"`
-		ErrorCode string `db:"error_code"`
+	var task downloadRow
+	if err := rows.StructScan(&task); err != nil {
+		return domain.DownloadTask{}, err
 	}
 
-	var rows []fileRow
-	err = r.db.SelectContext(ctx, &rows, "SELECT id, url, COALESCE(error_code, '') AS error_code FROM files WHERE download_id = $1", taskID)
+	fileRows, err := r.db.NamedQueryContext(ctx, `
+		SELECT id, download_id, url, error_code
+		FROM files
+		WHERE download_id = :download_id
+	`, fileDownloadParams{DownloadID: taskID})
 	if err != nil {
-		return task, err
+		return domain.DownloadTask{}, err
 	}
+	defer fileRows.Close()
 
-	for _, row := range rows {
-		file := domain.File{ID: row.ID, URL: row.URL}
-		if row.ErrorCode != "" {
-			file.ErrorCode = &domain.ErrorCode{Code: row.ErrorCode}
+	result := domain.DownloadTask{ID: task.ID, Status: task.Status}
+	for fileRows.Next() {
+		var row fileRow
+		if err := fileRows.StructScan(&row); err != nil {
+			return result, err
 		}
-		task.Files = append(task.Files, file)
+
+		file := domain.File{ID: row.ID, URL: row.URL}
+		if row.ErrorCode.Valid {
+			file.ErrorCode = &domain.ErrorCode{Code: row.ErrorCode.String}
+		}
+		result.Files = append(result.Files, file)
+	}
+	if err := fileRows.Err(); err != nil {
+		return result, err
 	}
 
-	return task, nil
+	return result, nil
 }
