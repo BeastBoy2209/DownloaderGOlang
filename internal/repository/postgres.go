@@ -86,14 +86,6 @@ func (r *PostgresRepo) CreateDownloadAndFiles(ctx context.Context, task *domain.
 }
 
 func (r *PostgresRepo) UpdateFile(ctx context.Context, taskID int, fileID int, errCode string, content []byte) error {
-	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{})
-	if err != nil {
-		return fmt.Errorf("begin transaction for updating file: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
 	var ec *string
 	if errCode != "" {
 		ec = &errCode
@@ -113,28 +105,16 @@ func (r *PostgresRepo) UpdateFile(ctx context.Context, taskID int, fileID int, e
 	if err != nil {
 		return fmt.Errorf("prepare file update query for download %d file %d: %w", taskID, fileID, err)
 	}
-	query = tx.Rebind(query)
-	_, err = tx.ExecContext(ctx, query, args...)
+	query = r.db.Rebind(query)
+	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("execute file update query for download %d file %d: %w", taskID, fileID, err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit file update transaction for download %d file %d: %w", taskID, fileID, err)
 	}
 
 	return nil
 }
 
 func (r *PostgresRepo) UpdateDownloadStatus(ctx context.Context, taskID int, newStatus string) error {
-	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{})
-	if err != nil {
-		return fmt.Errorf("begin transaction for updating download status: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
 	query, args, err := sqlx.Named(`
 		UPDATE downloads
 		SET status = :status
@@ -143,28 +123,16 @@ func (r *PostgresRepo) UpdateDownloadStatus(ctx context.Context, taskID int, new
 	if err != nil {
 		return fmt.Errorf("prepare download status update query for download %d: %w", taskID, err)
 	}
-	query = tx.Rebind(query)
-	_, err = tx.ExecContext(ctx, query, args...)
+	query = r.db.Rebind(query)
+	_, err = r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("execute download status update query for download %d: %w", taskID, err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit download status update transaction for download %d: %w", taskID, err)
 	}
 
 	return nil
 }
 
 func (r *PostgresRepo) GetFileContent(ctx context.Context, taskID int, fileID int) ([]byte, error) {
-	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction for reading file content: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
 	query, args, err := sqlx.Named(`
 		SELECT content
 		FROM files
@@ -173,8 +141,8 @@ func (r *PostgresRepo) GetFileContent(ctx context.Context, taskID int, fileID in
 	if err != nil {
 		return nil, fmt.Errorf("prepare file content query for download %d file %d: %w", taskID, fileID, err)
 	}
-	query = tx.Rebind(query)
-	rows, err := tx.QueryxContext(ctx, query, args...)
+	query = r.db.Rebind(query)
+	rows, err := r.db.QueryxContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("execute file content query for download %d file %d: %w", taskID, fileID, err)
 	}
@@ -187,10 +155,6 @@ func (r *PostgresRepo) GetFileContent(ctx context.Context, taskID int, fileID in
 	var content []byte
 	if err := rows.Scan(&content); err != nil {
 		return nil, fmt.Errorf("scan file content for download %d file %d: %w", taskID, fileID, err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit file content read transaction for download %d file %d: %w", taskID, fileID, err)
 	}
 
 	return content, nil
