@@ -3,7 +3,7 @@ package domain
 import "errors"
 
 var (
-	ErrClient   = errors.New("client error")
-	ErrBusiness = errors.New("business error")
-	ErrServer   = errors.New("server error")
+	ErrClient   = errors.New("invalid request")
+	ErrBusiness = errors.New("business rule violation")
+	ErrServer   = errors.New("internal server error")
 )

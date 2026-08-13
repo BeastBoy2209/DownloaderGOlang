@@ -129,7 +129,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 			expectSave: func(repo *mocks.MockRepository) {
 				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 1, "ERROR", nil).Times(1)
 			},
-			wantLogSubstr: "Creation request error",
+			wantLogSubstr: "failed to create request",
 		},
 		{
 			name: "client Do returns error",
@@ -140,7 +140,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 			expectSave: func(repo *mocks.MockRepository) {
 				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 2, "ERROR", nil).Times(1)
 			},
-			wantLogSubstr: "downloading error",
+			wantLogSubstr: "download request failed",
 		},
 		{
 			name: "non-200 status code",
@@ -154,7 +154,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 			expectSave: func(repo *mocks.MockRepository) {
 				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 3, "ERROR", nil).Times(1)
 			},
-			wantLogSubstr: "no content or server error",
+			wantLogSubstr: "unexpected response status",
 		},
 		{
 			name: "io.ReadAll returns error",
@@ -168,7 +168,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 			expectSave: func(repo *mocks.MockRepository) {
 				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 4, "ERROR", nil).Times(1)
 			},
-			wantLogSubstr: "bodyreading error",
+			wantLogSubstr: "failed to read response body",
 		},
 		{
 			name: "success – empty body",
@@ -182,7 +182,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 			expectSave: func(repo *mocks.MockRepository) {
 				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 5, "", []byte{}).Times(1)
 			},
-			wantLogSubstr: "is empty 0KB",
+			wantLogSubstr: "downloaded empty content",
 		},
 		{
 			name: "success – non empty body",
@@ -196,7 +196,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 			expectSave: func(repo *mocks.MockRepository) {
 				repo.EXPECT().UpdateFile(gomock.Any(), gomock.Any(), 6, "", []byte("hello world")).Times(1)
 			},
-			wantLogSubstr: "OK (11 b)",
+			wantLogSubstr: "downloaded 11 bytes",
 		},
 	}
 

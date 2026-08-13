@@ -32,7 +32,7 @@ func main() {
 		Scheme: "postgres",
 		User:   url.UserPassword(cfg.DB.User, cfg.DB.Password),
 		Host:   fmt.Sprintf("%s:%d", cfg.DB.Host, cfg.DB.Port),
-		Path:   "/" + cfg.DB.Name,
+		Path:   cfg.DB.Name,
 	}
 	q := urll.Query()
 	q.Set("sslmode", "disable")
