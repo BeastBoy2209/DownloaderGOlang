@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"downloader/internal/config"
+	"downloader/internal/repository"
+	"downloader/internal/transport"
+	"downloader/internal/usecase"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,11 +18,14 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+)
 
-	"downloader/internal/config"
-	"downloader/internal/repository"
-	"downloader/internal/transport"
-	"downloader/internal/usecase"
+const (
+	startupTimeout       = 15 * time.Second
+	shutdownTimeout      = 15 * time.Second
+	readHeaderTimeout    = 5 * time.Second
+	serverStartedMessage = "server started"
+	shutdownMessage      = "starting shutdown..."
 )
 
 func main() {
@@ -38,13 +45,14 @@ func main() {
 	q.Set("sslmode", "disable")
 	urll.RawQuery = q.Encode()
 	connStr := urll.String()
-	startupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	startupCtx, cancel := context.WithTimeout(context.Background(), startupTimeout)
 	defer cancel()
 
 	db, err := sqlx.ConnectContext(startupCtx, "pgx", connStr)
 	if err != nil {
 		slog.Error("sqlx can't connect to db", slog.String("error", err.Error()))
-		os.Exit(1)
+
+		return
 	}
 	defer func() {
 		_ = db.Close()
@@ -58,13 +66,15 @@ func main() {
 	e := handler.InitRoutes()
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	server := &http.Server{
-		Addr:    addr,
-		Handler: e,
+		Addr:              addr,
+		Handler:           e,
+		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
 	go func() {
-		slog.Info("Server started", slog.Int("port", int(cfg.Server.Port)))
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Info(serverStartedMessage, slog.Int("port", int(cfg.Server.Port)))
+		err := server.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server error", slog.String("error", err.Error()))
 			os.Exit(1)
 		}
@@ -74,13 +84,18 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	<-quit
-	slog.Info("Starting shutdown...")
-	ctx, cancelShutdown := context.WithTimeout(context.Background(), time.Second*15)
+	slog.Info(shutdownMessage)
+	ctx, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancelShutdown()
 
-	if err := server.Shutdown(ctx); err != nil {
-		slog.Error("Server was stopped cause error or timeout", slog.String("error", err.Error()))
-		os.Exit(1)
+	err = server.Shutdown(ctx)
+	if err != nil {
+		slog.Error(
+			"server was stopped cause error or timeout",
+			slog.String("error", err.Error()),
+		)
+
+		return
 	}
 
 	slog.Info("server was successfully shut down")

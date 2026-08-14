@@ -1,0 +1,175 @@
+version: "2"
+linters:
+  enable:
+    # arangolint
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - cyclop
+    # decorder
+    # depguard
+    - dogsled
+    - dupl
+    - dupword
+    - durationcheck
+    - embeddedstructfieldcheck
+    # err113
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    # exhaustruct
+    - exptostd
+    - fatcontext
+    # forbidigo
+    - forcetypeassert
+    # funcorder
+    - funlen
+    # ginkgolinter
+    - gocheckcompilerdirectives
+    # gochecknoglobals
+    - gochecknoinits
+    - gochecksumtype
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godoclint
+    - godot
+    - godox
+    # goheader
+    # gomoddirectives
+    # gomodguard
+    - goprintffuncname
+    - gosec
+    # gosmopolitan
+    - govet
+    # grouper
+    - iface
+    # importas
+    # inamedparam
+    - ineffassign
+    - interfacebloat
+    - intrange
+    - iotamixing
+    # ireturn
+    - lll
+    - loggercheck
+    - maintidx
+    - makezero
+    - mirror
+    - misspell
+    - mnd
+    - musttag
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - nlreturn
+    - noctx
+    - noinlineerr
+    - nolintlint
+    - nonamedreturns
+    - nosprintfhostport
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - predeclared
+    - promlinter
+    - protogetter
+    - reassign
+    - recvcheck
+    - revive
+    - rowserrcheck
+    - sloglint
+    # spancheck
+    - sqlclosecheck
+    - staticcheck
+    # tagalign
+    # tagliatelle
+    - testableexamples
+    - testifylint
+    # testpackage
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - unqueryvet
+    - unused
+    - usestdlibvars
+    - usetesting
+    # varnamelen
+    - wastedassign
+    - whitespace
+    # wrapcheck
+    # wsl_v5
+    # zerologlint
+  settings:
+    funlen:
+      lines: 200
+      statements: 60
+    cyclop:
+      max-complexity: 15
+      # The maximal average package complexity.
+      # If it's higher than 0.0 (float) the check is enabled.
+      # Default: 0.0
+      package-average: 10
+    gocritic:
+      enable-all: true
+      disabled-checks:
+        - whyNoLint
+        - hugeParam
+    godoclint:
+      default: basic
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    lll:
+      line-length: 100
+      tab-width: 8
+    nolintlint:
+      allow-no-explanation:
+        - lll
+      require-specific: true
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+    sloglint:
+      attr-only: true
+      static-msg: true
+      msg-style: lowercased
+      key-naming-case: snake
+      forbidden-keys:
+        - time
+        - lvl
+        - msg
+        - src
+formatters:
+  enable:
+    - gofumpt
+    - golines
+  exclusions:
+    generated: strict
+  settings:
+    gofumpt:
+      # See https://github.com/mvdan/gofumpt#extra-rules-behind--extra
+      extra-rules: true
+    golines:
+      max-len: 100
+      tab-len: 8
+      reformat-tags: false
+      shorten-comments: true
+run:
+  timeout: 2m
+  tests: true
+  allow-parallel-runners: true

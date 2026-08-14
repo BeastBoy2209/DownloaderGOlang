@@ -5,10 +5,20 @@ import (
 	"downloader/internal/usecase"
 	"errors"
 	"log"
+	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v5"
+)
+
+const (
+	responseErrorKey      = "error"
+	statusBadRequest      = http.StatusBadRequest
+	statusUnprocessable   = http.StatusUnprocessableEntity
+	statusInternalServer  = http.StatusInternalServerError
+	statusOK              = http.StatusOK
+	internalServerMessage = "internal server error"
 )
 
 type Handler struct {
@@ -23,13 +33,17 @@ func NewHandler(service *usecase.DownloadService) *Handler {
 
 func handleError(c *echo.Context, err error) error {
 	if errors.Is(err, domain.ErrClient) {
-		return c.JSON(400, map[string]string{"error": err.Error()})
+		return c.JSON(statusBadRequest, map[string]string{responseErrorKey: err.Error()})
 	}
 	if errors.Is(err, domain.ErrBusiness) {
-		return c.JSON(422, map[string]string{"error": err.Error()})
+		return c.JSON(statusUnprocessable, map[string]string{responseErrorKey: err.Error()})
 	}
 	log.Printf("request failed: %v", err)
-	return c.JSON(500, map[string]string{"error": "internal server error"})
+
+	return c.JSON(
+		statusInternalServer,
+		map[string]string{responseErrorKey: internalServerMessage},
+	)
 }
 
 func (h *Handler) StartDownload(c *echo.Context) error {
@@ -39,7 +53,8 @@ func (h *Handler) StartDownload(c *echo.Context) error {
 		} `json:"files"`
 		Timeout string `json:"timeout"`
 	}
-	if err := c.Bind(&req); err != nil {
+	err := c.Bind(&req)
+	if err != nil {
 		return handleError(c, domain.ErrClient)
 	}
 
@@ -58,7 +73,7 @@ func (h *Handler) StartDownload(c *echo.Context) error {
 		return handleError(c, err)
 	}
 
-	return c.JSON(200, map[string]any{
+	return c.JSON(statusOK, map[string]any{
 		"id":     taskID,
 		"status": "PROCESS",
 	})
@@ -76,7 +91,7 @@ func (h *Handler) GetDownload(c *echo.Context) error {
 		return handleError(c, err)
 	}
 
-	return c.JSON(200, task)
+	return c.JSON(statusOK, task)
 }
 
 func (h *Handler) GetFile(c *echo.Context) error {
@@ -92,7 +107,8 @@ func (h *Handler) GetFile(c *echo.Context) error {
 	if err != nil {
 		return handleError(c, err)
 	}
-	return c.Blob(200, "application/octet-stream", content)
+
+	return c.Blob(statusOK, "application/octet-stream", content)
 }
 
 func (h *Handler) InitRoutes() *echo.Echo {
@@ -100,5 +116,6 @@ func (h *Handler) InitRoutes() *echo.Echo {
 	e.POST("/downloads", h.StartDownload)
 	e.GET("/downloads/:id", h.GetDownload)
 	e.GET("/downloads/:id/files/:file_id", h.GetFile)
+
 	return e
 }

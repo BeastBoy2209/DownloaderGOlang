@@ -25,12 +25,15 @@ type DB struct {
 }
 
 func Load() *Config {
-	if err := godotenv.Load(); err != nil {
+	err := godotenv.Load()
+	if err != nil {
 		log.Printf(".env file not found: %v", err)
 	}
 	var cfg Config
-	if err := env.Parse(&cfg); err != nil {
+	err = env.Parse(&cfg)
+	if err != nil {
 		log.Fatalf("failed to parse environment configuration: %v", err)
 	}
+
 	return &cfg
 }
