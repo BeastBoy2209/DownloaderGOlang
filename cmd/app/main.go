@@ -46,7 +46,9 @@ func main() {
 		slog.Error("sqlx can't connect to db", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	slog.Info("DB OK")
 
 	repo := repository.NewPostgresRepo(db)

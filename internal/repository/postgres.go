@@ -39,7 +39,9 @@ func (r *PostgresRepo) CreateDownloadAndFiles(ctx context.Context, task *domain.
 	if err != nil {
 		return 0, fmt.Errorf("execute download insert query: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	if !rows.Next() {
 		return 0, fmt.Errorf("create download and files: download id was not returned: %w", domain.ErrServer)
@@ -68,11 +70,15 @@ func (r *PostgresRepo) CreateDownloadAndFiles(ctx context.Context, task *domain.
 			return 0, fmt.Errorf("execute file insert query for download %d file %d: %w", taskID, i, err)
 		}
 		if !rows.Next() {
-			rows.Close()
+			if closeErr := rows.Close(); closeErr != nil {
+				return 0, fmt.Errorf("close file insert rows for download %d file %d: %w", taskID, i, closeErr)
+			}
 			return 0, fmt.Errorf("create file for download %d: file id was not returned: %w", taskID, domain.ErrServer)
 		}
 		if err := rows.Scan(&task.Files[i].ID); err != nil {
-			rows.Close()
+			if closeErr := rows.Close(); closeErr != nil {
+				return 0, fmt.Errorf("close file insert rows for download %d file %d: %w", taskID, i, closeErr)
+			}
 			return 0, fmt.Errorf("scan created file id for download %d file %d: %w", taskID, i, err)
 		}
 		if err := rows.Close(); err != nil {
@@ -146,7 +152,9 @@ func (r *PostgresRepo) GetFileContent(ctx context.Context, taskID int, fileID in
 	if err != nil {
 		return nil, fmt.Errorf("execute file content query for download %d file %d: %w", taskID, fileID, err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	if !rows.Next() {
 		return nil, fmt.Errorf("file content for download %d file %d not found: %w", taskID, fileID, domain.ErrClient)
@@ -182,7 +190,9 @@ func (r *PostgresRepo) GetDownload(ctx context.Context, taskID int) (domain.Down
 	if err != nil {
 		return domain.DownloadTask{}, fmt.Errorf("execute download query for download %d: %w", taskID, err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	if !rows.Next() {
 		return domain.DownloadTask{}, fmt.Errorf("download %d not found: %w", taskID, domain.ErrClient)
@@ -206,7 +216,9 @@ func (r *PostgresRepo) GetDownload(ctx context.Context, taskID int) (domain.Down
 	if err != nil {
 		return domain.DownloadTask{}, fmt.Errorf("execute file list query for download %d: %w", taskID, err)
 	}
-	defer fileRows.Close()
+	defer func() {
+		_ = fileRows.Close()
+	}()
 
 	result := domain.DownloadTask{ID: task.ID, Status: task.Status}
 	for fileRows.Next() {

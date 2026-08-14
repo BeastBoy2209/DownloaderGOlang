@@ -65,7 +65,9 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 		}
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("task %d file %d (%s): unexpected response status %d", taskID, file.ID, url, resp.StatusCode)
