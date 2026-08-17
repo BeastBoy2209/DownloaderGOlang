@@ -4,7 +4,7 @@ import (
 	"downloader/internal/domain"
 	"downloader/internal/usecase"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -38,7 +38,7 @@ func handleError(c *echo.Context, err error) error {
 	if errors.Is(err, domain.ErrBusiness) {
 		return c.JSON(statusUnprocessable, map[string]string{responseErrorKey: err.Error()})
 	}
-	log.Printf("request failed: %v", err)
+	slog.Error("request failed", slog.String("error", err.Error()))
 
 	return c.JSON(
 		statusInternalServer,

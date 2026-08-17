@@ -5,7 +5,7 @@ import (
 	"downloader/internal/domain"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -61,14 +61,6 @@ func (d *DownloadService) GetFileContent(ctx context.Context, taskID, fileID int
 	return content, nil
 }
 
-func logFileInfof(taskID, fileID int, url, format string, args ...any) {
-	log.Printf("task %d file %d (%s): "+format, append([]any{taskID, fileID, url}, args...)...)
-}
-
-func logFileError(taskID, fileID int, url, message string, err error) {
-	logFileInfof(taskID, fileID, url, "%s: %v", message, err)
-}
-
 func (d *DownloadService) persistFileFailureState(
 	ctx context.Context,
 	taskID int,
@@ -77,7 +69,12 @@ func (d *DownloadService) persistFileFailureState(
 ) {
 	saveErr := d.repo.UpdateFile(ctx, taskID, file.ID, "ERROR", nil)
 	if saveErr != nil {
-		logFileError(taskID, file.ID, url, "failed to persist failure state", saveErr)
+		slog.Default().Error("failed to persist failure state",
+			slog.Int("task_id", taskID),
+			slog.Int("file_id", file.ID),
+			slog.String("url", url),
+			slog.Any("error", saveErr),
+		)
 	}
 }
 
@@ -85,7 +82,12 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 	url := file.URL
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
-		logFileError(taskID, file.ID, url, "failed to create request", err)
+		slog.Default().Error("failed to create request",
+			slog.Int("task_id", taskID),
+			slog.Int("file_id", file.ID),
+			slog.String("url", url),
+			slog.Any("error", err),
+		)
 		d.persistFileFailureState(ctx, taskID, file, url)
 
 		return
@@ -95,7 +97,12 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 
 	resp, err := d.client.Do(req)
 	if err != nil {
-		logFileError(taskID, file.ID, url, "download request failed", err)
+		slog.Default().Error("download request failed",
+			slog.Int("task_id", taskID),
+			slog.Int("file_id", file.ID),
+			slog.String("url", url),
+			slog.Any("error", err),
+		)
 		d.persistFileFailureState(ctx, taskID, file, url)
 
 		return
@@ -105,7 +112,12 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		logFileInfof(taskID, file.ID, url, "unexpected response status %d", resp.StatusCode)
+		slog.Default().Info("unexpected response status",
+			slog.Int("task_id", taskID),
+			slog.Int("file_id", file.ID),
+			slog.String("url", url),
+			slog.Int("status", resp.StatusCode),
+		)
 		d.persistFileFailureState(ctx, taskID, file, url)
 
 		return
@@ -113,21 +125,40 @@ func (d *DownloadService) downloadSingleFile(ctx context.Context, taskID int, fi
 
 	bytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logFileError(taskID, file.ID, url, "failed to read response body", err)
+		slog.Error("failed to read response body",
+			slog.Int("task_id", taskID),
+			slog.Int("file_id", file.ID),
+			slog.String("url", url),
+			slog.Any("error", err),
+		)
 		d.persistFileFailureState(ctx, taskID, file, url)
 
 		return
 	}
 
 	if len(bytes) == 0 {
-		logFileInfof(taskID, file.ID, url, "downloaded empty content")
+		slog.Info("downloaded empty content",
+			slog.Int("task_id", taskID),
+			slog.Int("file_id", file.ID),
+			slog.String("url", url),
+		)
 	} else {
-		logFileInfof(taskID, file.ID, url, "downloaded %d bytes", len(bytes))
+		slog.Info("downloaded bytes",
+			slog.Int("task_id", taskID),
+			slog.Int("file_id", file.ID),
+			slog.String("url", url),
+			slog.Int("size", len(bytes)),
+		)
 	}
 
 	err = d.repo.UpdateFile(ctx, taskID, file.ID, "", bytes)
 	if err != nil {
-		logFileError(taskID, file.ID, url, "failed to persist file content", err)
+		slog.Error("failed to persist file content",
+			slog.Int("task_id", taskID),
+			slog.Int("file_id", file.ID),
+			slog.String("url", url),
+			slog.Any("error", err),
+		)
 	}
 }
 
@@ -154,7 +185,10 @@ func (d *DownloadService) runBackgroundProcess(
 	_ = eg.Wait()
 	err := d.repo.UpdateDownloadStatus(ctx, taskID, "DONE")
 	if err != nil {
-		log.Printf("task %d: failed to mark download as DONE: %v", taskID, err)
+		slog.Default().Error("failed to mark download as DONE",
+			slog.Int("task_id", taskID),
+			slog.Any("error", err),
+		)
 	}
 }
 

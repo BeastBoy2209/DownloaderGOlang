@@ -7,7 +7,7 @@ import (
 	"downloader/internal/mocks"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"testing"
@@ -266,9 +266,9 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 			svc := NewDownloadService(mockRepo, tc.httpClient)
 
 			var logBuf bytes.Buffer
-			oldOut := log.Writer()
-			log.SetOutput(&logBuf)
-			defer log.SetOutput(oldOut)
+			oldLogger := slog.Default()
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, nil)))
+			defer slog.SetDefault(oldLogger)
 
 			svc.downloadSingleFile(context.Background(), 123, tc.file)
 

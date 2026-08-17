@@ -1,7 +1,8 @@
 package config
 
 import (
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
@@ -27,12 +28,17 @@ type DB struct {
 func Load() *Config {
 	err := godotenv.Load()
 	if err != nil {
-		log.Printf(".env file not found: %v", err)
+		slog.Warn(".env file not found", slog.String("error", err.Error()))
 	}
+
 	var cfg Config
+
 	err = env.Parse(&cfg)
 	if err != nil {
-		log.Fatalf("failed to parse environment configuration: %v", err)
+		slog.Default().Error("failed to parse environment configuration",
+			slog.String("error", err.Error()),
+		)
+		os.Exit(1)
 	}
 
 	return &cfg
