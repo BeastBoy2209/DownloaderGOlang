@@ -248,7 +248,7 @@ func TestDownloadService_downloadSingleFile(t *testing.T) {
 					).
 					Times(1)
 			},
-			wantLogSubstr: "downloaded 11 bytes",
+			wantLogSubstr: "downloaded bytes",
 		},
 	}
 

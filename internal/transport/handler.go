@@ -113,6 +113,7 @@ func (h *Handler) GetFile(c *echo.Context) error {
 
 func (h *Handler) InitRoutes() *echo.Echo {
 	e := echo.New()
+	e.Use(RequestIDMiddleware)
 	e.POST("/downloads", h.StartDownload)
 	e.GET("/downloads/:id", h.GetDownload)
 	e.GET("/downloads/:id/files/:file_id", h.GetFile)
