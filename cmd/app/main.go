@@ -4,6 +4,7 @@ import (
 	"context"
 	"downloader/internal/config"
 	"downloader/internal/repository"
+	"downloader/internal/temporal"
 	"downloader/internal/transport"
 	"downloader/internal/usecase"
 	"errors"
@@ -18,6 +19,8 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
 )
 
 const (
@@ -60,7 +63,34 @@ func main() {
 	slog.Info("DB OK")
 
 	repo := repository.NewPostgresRepo(db)
-	service := usecase.NewDownloadService(repo, nil)
+
+	temporalClient, err := client.Dial(client.Options{})
+	if err != nil {
+		slog.Error("failed to create temporal client", slog.Any("error", err))
+
+		return
+	}
+	defer temporalClient.Close()
+
+	activities := &temporal.Activities{
+		Repo:   repo,
+		Client: http.DefaultClient,
+	}
+
+	w := worker.New(temporalClient, temporal.DownloadTaskQueue, worker.Options{})
+	w.RegisterWorkflow(temporal.DownloadWorkflow)
+	w.RegisterActivity(activities.DownloadFileActivity)
+	w.RegisterActivity(activities.UpdateDownloadStatusActivity)
+
+	err = w.Start()
+	if err != nil {
+		slog.Error("failed to start temporal worker", slog.Any("error", err))
+
+		return
+	}
+	defer w.Stop()
+
+	service := usecase.NewDownloadService(repo, temporalClient)
 	handler := transport.NewHandler(service)
 
 	e := handler.InitRoutes()
