@@ -63,8 +63,11 @@ func main() {
 	slog.Info("DB OK")
 
 	repo := repository.NewPostgresRepo(db)
+	
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	temporalClient, err := client.DialContext(ctx, client.Options{})
 
-	temporalClient, err := client.Dial(client.Options{})
 	if err != nil {
 		slog.Error("failed to create temporal client", slog.Any("error", err))
 
