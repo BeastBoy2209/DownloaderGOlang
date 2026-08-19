@@ -4,6 +4,7 @@ import (
 	"downloader/internal/domain"
 	"downloader/internal/mocks"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -24,6 +25,7 @@ func TestDownloadWorkflow(t *testing.T) {
 			{ID: 1, URL: "http://example.com/1"},
 			{ID: 2, URL: "http://example.com/2"},
 		},
+		ActivityTimeout: 10 * time.Minute,
 	}
 
 	env.OnActivity("DownloadFileActivity", mock.Anything, mock.Anything).Return(nil).Times(2)
@@ -42,6 +44,7 @@ func TestDownloadWorkflow(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 }
+
 func TestUpdateDownloadStatusActivity(t *testing.T) {
 	t.Parallel()
 

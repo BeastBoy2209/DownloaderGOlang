@@ -3,14 +3,21 @@ package config
 import (
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Server Server `envPrefix:"SERVER_"`
-	DB     DB     `envPrefix:"DB_"`
+	Server   Server   `envPrefix:"SERVER_"`
+	DB       DB       `envPrefix:"DB_"`
+	Temporal Temporal `envPrefix:"TEMPORAL_"`
+}
+
+type Temporal struct {
+	TaskQueue       string        `env:"TASK_QUEUE" envDefault:"DOWNLOAD_TASK_QUEUE"`
+	ActivityTimeout time.Duration `env:"ACTIVITY_TIMEOUT" envDefault:"10m"`
 }
 
 type Server struct {

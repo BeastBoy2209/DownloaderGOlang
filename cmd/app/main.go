@@ -63,11 +63,9 @@ func main() {
 	slog.Info("DB OK")
 
 	repo := repository.NewPostgresRepo(db)
-	
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithTimeout(context.Background(), startupTimeout)
 	defer cancel()
 	temporalClient, err := client.DialContext(ctx, client.Options{})
-
 	if err != nil {
 		slog.Error("failed to create temporal client", slog.Any("error", err))
 
@@ -80,10 +78,9 @@ func main() {
 		Client: http.DefaultClient,
 	}
 
-	w := worker.New(temporalClient, temporal.DownloadTaskQueue, worker.Options{})
+	w := worker.New(temporalClient, cfg.Temporal.TaskQueue, worker.Options{})
 	w.RegisterWorkflow(temporal.DownloadWorkflow)
-	w.RegisterActivity(activities.DownloadFileActivity)
-	w.RegisterActivity(activities.UpdateDownloadStatusActivity)
+	w.RegisterActivity(activities)
 
 	err = w.Start()
 	if err != nil {
@@ -93,7 +90,12 @@ func main() {
 	}
 	defer w.Stop()
 
-	service := usecase.NewDownloadService(repo, temporalClient)
+	service := usecase.NewDownloadService(
+		repo,
+		temporalClient,
+		cfg.Temporal.TaskQueue,
+		cfg.Temporal.ActivityTimeout,
+	)
 	handler := transport.NewHandler(service)
 
 	e := handler.InitRoutes()

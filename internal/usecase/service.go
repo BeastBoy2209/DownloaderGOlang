@@ -11,14 +11,23 @@ import (
 )
 
 type DownloadService struct {
-	repo           domain.Repository
-	temporalClient client.Client
+	repo            domain.Repository
+	temporalClient  client.Client
+	taskQueue       string
+	activityTimeout time.Duration
 }
 
-func NewDownloadService(r domain.Repository, tc client.Client) *DownloadService {
+func NewDownloadService(
+	r domain.Repository,
+	tc client.Client,
+	taskQueue string,
+	activityTimeout time.Duration,
+) *DownloadService {
 	return &DownloadService{
-		repo:           r,
-		temporalClient: tc,
+		repo:            r,
+		temporalClient:  tc,
+		taskQueue:       taskQueue,
+		activityTimeout: activityTimeout,
 	}
 }
 
@@ -76,12 +85,13 @@ func (d *DownloadService) StartDownload(
 
 	workflowOptions := client.StartWorkflowOptions{
 		ID:        fmt.Sprintf("download-task-%d", id),
-		TaskQueue: temporal.DownloadTaskQueue,
+		TaskQueue: d.taskQueue,
 	}
 
 	params := temporal.DownloadWorkflowParams{
-		TaskID: id,
-		Files:  task.Files,
+		TaskID:          id,
+		Files:           task.Files,
+		ActivityTimeout: d.activityTimeout,
 	}
 
 	_, err = d.temporalClient.ExecuteWorkflow(
