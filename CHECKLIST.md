@@ -1,3 +1,13 @@
+пайплайн
+-Аргументы терминала
+-Создание задачи
+-Присвоение ID и сохранение в map — Pending
+-Получение задачи по ID
+-Проверка состояния
+-Processing → разбор URL → Completed
+-Сохранение обновлённой задачи
+-Вывод результата
+
 # SIS Checkpoint 1 — Checklist
 
 Source: requirements from `sis_checkpoint_1.md`.
