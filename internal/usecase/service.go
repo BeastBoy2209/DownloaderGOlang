@@ -6,6 +6,8 @@ type Repository interface {
 	Create(domain.Task) domain.Task
 	Get(int) (domain.Task, error)
 	Save(domain.Task) error
+	// Update атомарно меняет задачу под локом репозитория.
+	Update(id int, fn func(*domain.Task) error) (domain.Task, error)
 }
 
 type Service struct {
@@ -28,16 +30,7 @@ func (s *Service) Get(id int) (domain.Task, error) {
 	return s.repo.Get(id)
 }
 
+// Process - синхронная обработка (CP1). Через Update, чтобы не гоняться с воркерами.
 func (s *Service) Process(id int) (domain.Task, error) {
-	task, err := s.repo.Get(id)
-	if err != nil {
-		return domain.Task{}, err
-	}
-	if err := task.Process(); err != nil {
-		return domain.Task{}, err
-	}
-	if err := s.repo.Save(task); err != nil {
-		return domain.Task{}, err
-	}
-	return task, nil
+	return s.repo.Update(id, func(t *domain.Task) error { return t.Process() })
 }

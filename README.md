@@ -1,63 +1,81 @@
-# SIS Checkpoint 1 — URL Analyzer
+# SIS Checkpoint 2 — URL Analyzer (concurrent)
 
 [Requirements and submission checklist](CHECKLIST.md)
 
-A synchronous Go application for managing URL analysis tasks.
+A Go application for managing URL analysis tasks, now processed concurrently by a worker pool.
 The input is a URL string. The result contains the scheme, host with port, path,
 and query string. The application makes no network requests and uses only the
 standard library.
 
 ## Running
 
-Go 1.27 is required by the checkpoint specification.
+Go 1.27 is required.
 
 ```bash
 go run ./cmd/app 'https://example.com:8080/docs?q=go' 'http://example.org'
 ```
 
-Each argument creates a separate task. Tasks are processed sequentially, and
-results are printed to the terminal. On error, the program exits with code 1.
-Data stays in memory until the program exits.
+Each argument becomes a task: it is created, submitted to the pool, processed
+by a worker, and printed after the pool stops. A URL must use `http`/`https`
+and have a host; otherwise the program exits with code 1. Data lives in memory.
 
-A URL must use the `http` or `https` scheme and have a nonempty hostname.
-Empty input, relative addresses, and malformed URLs are rejected with an `error`.
-`Path` contains the decoded path; `Query` contains the original query string
-without `?`. The fragment after `#` is not included in the result.
-
-## Task lifecycle
+## Concurrency design
 
 ```text
-Pending → Processing → Completed
+Create -> Submit -> [ bounded queue (chan int) ] -> Worker 1..N -> repo.Update
+                                                                    ^
+                     Get (any goroutine) ---------- RWMutex -------+
 ```
 
-`Create` validates the input and saves the task as `Pending`.
-`Process` is allowed only for `Pending` tasks: it changes the status to
-`Processing`, computes the result, and sets `Completed`. Processing is
-synchronous, so the caller receives a completed task.
-Repeated processing, processing from `Processing`, and processing from an
-unknown state return `ErrInvalidState` without changing the task.
-Invalid input also leaves the task unchanged. A missing ID returns `ErrNotFound`.
+- **Workers:** fixed number, at least 2 (`NewPool` returns `ErrInvalidPool` otherwise). The CLI uses 3.
+  Workers are long-lived: `for id := range queue`.
+- **Queue:** buffered `chan int` (task IDs) with a fixed capacity (CLI: one slot per argument).
+- **Full queue:** `Submit` never blocks. It returns `ErrQueueFull`, and the task goes back to `Pending`
+  so it can be submitted again later.
+- **Submit** returns right after the task is queued; it does not wait for processing.
+- **Processing order** is not guaranteed; nothing depends on it.
+
+### Task lifecycle
+
+```text
+Pending -> Queued -> Processing -> Completed
+              |            \-> Failed
+              \-> Pending (rollback if queue is full)
+```
+
+Allowed transitions are enforced in `domain.Task` (`Enqueue`, `Dequeue`, `Start`, `Finish`).
+Anything else returns `ErrInvalidState`: submitting a Queued, Processing, Completed
+or Failed task is an error (no retries). The CP1 synchronous `Service.Process`
+(Pending -> Completed) still works and goes through the same atomic update.
+Unknown ID -> `ErrNotFound`.
+
+### Synchronization
+
+- `repository.Memory` guards the map and the ID counter with one `sync.RWMutex`; `Get` uses `RLock`.
+- `Memory.Update(id, fn)` is an atomic read-modify-write under the write lock. All state
+  transitions go through it, so two workers (or two `Submit` calls) can never claim the same task:
+  only one `Queued -> Processing` / `Pending -> Queued` succeeds.
+- Tasks are stored by value and returned as copies, so no shared mutable fields leak out.
+- The actual URL analysis runs **outside** the lock (`Analyze` is pure); the lock is held only
+  for the short status/result writes.
+- `Pool.mu` (RWMutex) + `closed` flag: `Submit` holds `RLock` during its non-blocking send,
+  `Stop` takes `Lock` before `close(queue)`. So a send on a closed channel is impossible and
+  `Submit` cannot block forever on a stopped pool. Only `Pool` creates and closes the channel.
+
+### Stopping
+
+`Pool.Stop()` marks the pool closed (new `Submit` -> `ErrPoolStopped`, task stays untouched),
+closes the queue, and waits on a `sync.WaitGroup`. Workers drain what is already in the queue,
+so accepted tasks are not lost, then exit. Calling `Stop` again is a safe no-op.
 
 ## Structure
 
-- `internal/domain` — task, result, states, validation, and URL analysis.
-- `internal/usecase` — creation, retrieval, processing, and the `Repository` interface.
-- `internal/repository` — storage using `map[int]domain.Task` and an ID counter.
-- `cmd/app` — command-line arguments and dependency setup.
+- `internal/domain` — task, states, transitions, pure `Analyze`.
+- `internal/usecase` — `Service` (create/get/sync process) and `Pool` (queue + workers).
+- `internal/repository` — thread-safe in-memory storage.
+- `cmd/app` — CLI wiring.
 
-The domain layer does not depend on the other layers. The usecase layer depends
-on the domain and a repository interface; the implementation is passed through
-the constructor. Future HTTP handlers or workers can call the same service.
-The current storage supports sequential access; synchronization must be added
-before introducing goroutines.
-
-`Task.Validate` uses a value receiver because it does not modify the task.
-`Task.Process` uses a pointer receiver to change the status and result.
-Storage returns copies of structs: tasks contain no slices, maps, or pointers,
-so modifying a returned copy does not change the stored task.
-After processing, the service explicitly saves the updated task through `Save`.
-
-Errors are declared with `errors.New` and can be checked with `errors.Is`.
+Errors are declared with `errors.New` and checked with `errors.Is`.
 
 ## Verification
 
@@ -65,9 +83,12 @@ Errors are declared with `errors.New` and can be checked with `errors.Is`.
 gofmt -l .
 go vet ./...
 go test ./...
+go test -race ./...
 ```
 
-Tests use the standard `testing` package and include table-driven cases.
-They cover creation, validation, retrieval, missing IDs, processing, exact
-results, persisted status, invalid transitions, independent tasks, and copies
-returned by storage.
+Tests (standard `testing`) cover the CP1 behavior plus: pool startup and config validation,
+async submit, many tasks with correct per-task results, real overlap of two tasks
+(workers block on a channel gate until both have started), worker limit, duplicate/invalid
+submits, full queue and recovery, failed processing, concurrent create/submit/get,
+single processing of a task submitted from many goroutines, `Stop` draining accepted tasks,
+rejection after stop, double `Stop`, goroutine leak check, and `Submit` racing with `Stop`.
